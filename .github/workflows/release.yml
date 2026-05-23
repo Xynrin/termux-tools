@@ -36,12 +36,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross
-        run: cargo install cross --locked
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
 
       - name: Build release
         working-directory: xynrin-tui
-        run: cross build --release --target ${{ matrix.target }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: cargo ndk -t ${{ matrix.target }} --platform 24 build --release
 
       - name: Rename artifact
         run: |
