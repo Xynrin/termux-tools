@@ -122,8 +122,24 @@ show_banner() {
 # ============================================================
 do_update() {
     echo -e "${CYAN}${MSG_UPDATING}${RESET}"
-    local remote
-    remote="$(curl -sL "${REPO_RAW}/scripts/version" 2>/dev/null | tr -d '[:space:]')"
+    local remote=""
+
+    # 优先用 git ls-remote 查最新 tag：实时、不走 CDN 缓存、无 API 限额
+    # Prefer git ls-remote tags: real-time, no CDN cache, no API limits
+    if command -v git &> /dev/null; then
+        remote="$(git ls-remote --tags --refs "$REPO_HTTPS" 2>/dev/null \
+            | awk -F'refs/tags/v' 'NF==2 {print $2}' \
+            | sort -V | tail -n1)"
+    fi
+
+    # 回退：CDN 上的版本文件（带时间戳防缓存）
+    # Fallback: CDN version file (with cache-buster)
+    if [[ -z "$remote" ]]; then
+        remote="$(curl -sL -H 'Cache-Control: no-cache' \
+            "${REPO_RAW}/scripts/version?t=$(date +%s)" 2>/dev/null \
+            | tr -d '[:space:]')"
+    fi
+
     if [[ -z "$remote" ]]; then
         echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
         return 1
