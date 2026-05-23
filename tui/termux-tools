@@ -21,13 +21,16 @@ set -euo pipefail
 # Path and version variables
 # ============================================================
 
-# 获取当前脚本所在的绝对路径
-# Get absolute path of the directory containing this script
-#   ${BASH_SOURCE[0]}: 当前脚本路径 / current script path
-#   dirname: 提取目录部分 / extract directory part
-#   cd ... && pwd: 切换并打印绝对路径 / cd into it and print absolute path
-#   &> /dev/null: 屏蔽所有输出 / suppress all output
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+# 获取当前脚本的真实路径（跟随符号链接）
+# Get the real path of this script (following symlinks)
+#   readlink -f: 解析所有符号链接得到绝对真实路径
+#   readlink -f: resolves all symlinks to the absolute real path
+#   这样无论是直接运行还是通过 $PREFIX/bin 中的软链运行，
+#   都能找到仓库里的 lang/ 和 scripts/ 目录
+#   This way, whether invoked directly or via the symlink in
+#   $PREFIX/bin, lang/ and scripts/ in the repo are still found
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" &> /dev/null && pwd)"
 
 # 项目根目录 = 脚本目录的上一级（tui/ 的上一级）
 # Project root = parent of script directory (parent of tui/)
