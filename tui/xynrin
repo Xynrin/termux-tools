@@ -404,6 +404,253 @@ change_language() {
 }
 
 # ============================================================
+# 7. 美化 Termux / Beautify Termux
+# ============================================================
+# 美化标记：写入 colors.properties 顶部，便于卸载时识别
+# Marker line written at top of colors.properties for uninstall detection
+BEAUTIFY_MARKER="# xynrin-beautify"
+
+beautify_apply() {
+    local theme="$1"
+    local props="$HOME/.termux/termux.properties"
+    local colors="$HOME/.termux/colors.properties"
+    local font="$HOME/.termux/font.ttf"
+
+    mkdir -p "$HOME/.termux"
+
+    # 备份现有配置 / Backup existing configs
+    local ts="$(date +%s)"
+    [[ -f "$colors" ]] && cp "$colors" "${colors}.bak.${ts}"
+    [[ -f "$props" ]] && cp "$props" "${props}.bak.${ts}"
+    [[ -f "$font" ]] && cp "$font" "${font}.bak.${ts}"
+
+    # 写主题配色 / Write theme colors
+    case "$theme" in
+        dracula)
+            cat > "$colors" <<'EOF'
+# xynrin-beautify: dracula
+foreground=#f8f8f2
+background=#282a36
+cursor=#f8f8f2
+color0=#000000
+color1=#ff5555
+color2=#50fa7b
+color3=#f1fa8c
+color4=#bd93f9
+color5=#ff79c6
+color6=#8be9fd
+color7=#bfbfbf
+color8=#4d4d4d
+color9=#ff6e67
+color10=#5af78e
+color11=#f4f99d
+color12=#caa9fa
+color13=#ff92d0
+color14=#9aedfe
+color15=#e6e6e6
+EOF
+            ;;
+        catppuccin)
+            cat > "$colors" <<'EOF'
+# xynrin-beautify: catppuccin
+foreground=#cdd6f4
+background=#1e1e2e
+cursor=#f5e0dc
+color0=#45475a
+color1=#f38ba8
+color2=#a6e3a1
+color3=#f9e2af
+color4=#89b4fa
+color5=#f5c2e7
+color6=#94e2d5
+color7=#bac2de
+color8=#585b70
+color9=#f38ba8
+color10=#a6e3a1
+color11=#f9e2af
+color12=#89b4fa
+color13=#f5c2e7
+color14=#94e2d5
+color15=#a6adc8
+EOF
+            ;;
+        nord)
+            cat > "$colors" <<'EOF'
+# xynrin-beautify: nord
+foreground=#d8dee9
+background=#2e3440
+cursor=#d8dee9
+color0=#3b4252
+color1=#bf616a
+color2=#a3be8c
+color3=#ebcb8b
+color4=#81a1c1
+color5=#b48ead
+color6=#88c0d0
+color7=#e5e9f0
+color8=#4c566a
+color9=#bf616a
+color10=#a3be8c
+color11=#ebcb8b
+color12=#81a1c1
+color13=#b48ead
+color14=#8fbcbb
+color15=#eceff4
+EOF
+            ;;
+    esac
+
+    # 写 properties（光标平滑 + 圆角光标 + extra-keys）
+    # Write properties (smooth cursor + extra keys)
+    cat > "$props" <<'EOF'
+# xynrin-beautify
+terminal-cursor-style = bar
+terminal-cursor-blink-rate = 500
+extra-keys = [['ESC','/','-','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]
+EOF
+
+    # 安装等宽字体（JetBrains Mono Nerd 备用源）
+    # Install programming font with fallback URL
+    if ! command -v curl &> /dev/null; then
+        pkg install -y curl &> /dev/null || true
+    fi
+    echo -e "${CYAN}${MSG_BEAUTIFY_DOWNLOADING_FONT}${RESET}"
+    local font_url="https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/JetBrainsMono/Ligatures/Regular/JetBrainsMonoNerdFont-Regular.ttf"
+    if ! curl -fsSL --connect-timeout 10 "$font_url" -o "$font" 2>/dev/null; then
+        echo -e "${YELLOW}${MSG_BEAUTIFY_FONT_FAIL}${RESET}"
+    fi
+
+    # 安装 starship 提示符（如未装）/ Install starship prompt
+    if ! command -v starship &> /dev/null; then
+        echo -e "${CYAN}${MSG_BEAUTIFY_INSTALLING_STARSHIP}${RESET}"
+        pkg install -y starship &> /dev/null || true
+    fi
+
+    # 写 starship 配置 / Starship config
+    mkdir -p "$HOME/.config"
+    cat > "$HOME/.config/starship.toml" <<'EOF'
+# xynrin-beautify
+add_newline = true
+format = "[┏](bold green) $username$hostname$directory$git_branch$git_status\n[┗](bold green) $character"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+
+[directory]
+style = "bold cyan"
+truncation_length = 3
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+EOF
+
+    # 启用 starship（追加到 .bashrc）/ Enable starship in .bashrc
+    local rc="$HOME/.bashrc"
+    touch "$rc"
+    if ! grep -qF 'starship init bash' "$rc"; then
+        echo '' >> "$rc"
+        echo '# xynrin-beautify' >> "$rc"
+        echo 'eval "$(starship init bash)"' >> "$rc"
+    fi
+
+    # 重载 termux 配置 / Reload termux UI
+    command -v termux-reload-settings &> /dev/null && termux-reload-settings || true
+
+    echo -e "${GREEN}${MSG_BEAUTIFY_APPLIED}: ${theme}${RESET}"
+    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
+}
+
+# 检测已有美化标记 / Detect existing beautify marker
+beautify_detect() {
+    local found=()
+    [[ -f "$HOME/.termux/colors.properties" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/colors.properties" 2>/dev/null && \
+        found+=("colors.properties")
+    [[ -f "$HOME/.termux/termux.properties" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/termux.properties" 2>/dev/null && \
+        found+=("termux.properties")
+    [[ -f "$HOME/.config/starship.toml" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.config/starship.toml" 2>/dev/null && \
+        found+=("starship.toml")
+    [[ -f "$HOME/.bashrc" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.bashrc" 2>/dev/null && \
+        found+=(".bashrc(starship)")
+    [[ -f "$HOME/.termux/font.ttf" ]] && found+=("font.ttf")
+    printf '%s\n' "${found[@]}"
+}
+
+beautify_uninstall() {
+    local detected
+    detected="$(beautify_detect)"
+
+    if [[ -z "$detected" ]]; then
+        echo -e "${YELLOW}${MSG_BEAUTIFY_NONE_FOUND}${RESET}"
+        return 0
+    fi
+
+    echo -e "${CYAN}${MSG_BEAUTIFY_DETECTED}:${RESET}"
+    while IFS= read -r f; do
+        echo -e "  - ${YELLOW}${f}${RESET}"
+    done <<< "$detected"
+    echo ""
+
+    # 删除带标记的文件 / Remove marker-tagged files
+    [[ -f "$HOME/.termux/colors.properties" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/colors.properties" 2>/dev/null && \
+        rm -f "$HOME/.termux/colors.properties"
+    [[ -f "$HOME/.termux/termux.properties" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/termux.properties" 2>/dev/null && \
+        rm -f "$HOME/.termux/termux.properties"
+    [[ -f "$HOME/.config/starship.toml" ]] && \
+        grep -q "$BEAUTIFY_MARKER" "$HOME/.config/starship.toml" 2>/dev/null && \
+        rm -f "$HOME/.config/starship.toml"
+    rm -f "$HOME/.termux/font.ttf"
+
+    # 移除 .bashrc 中的 starship 行（含标记块）
+    # Strip the marker block from .bashrc
+    if [[ -f "$HOME/.bashrc" ]] && grep -q "$BEAUTIFY_MARKER" "$HOME/.bashrc" 2>/dev/null; then
+        sed -i '/# xynrin-beautify/,+1d' "$HOME/.bashrc"
+    fi
+
+    command -v termux-reload-settings &> /dev/null && termux-reload-settings || true
+
+    echo -e "${GREEN}${MSG_BEAUTIFY_REMOVED}${RESET}"
+    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
+}
+
+beautify_menu() {
+    local options=(
+        "1) ${MSG_BEAUTIFY_DRACULA}"
+        "2) ${MSG_BEAUTIFY_CATPPUCCIN}"
+        "3) ${MSG_BEAUTIFY_NORD}"
+        "4) ${MSG_BEAUTIFY_UNINSTALL}"
+        "0) ${OPT_BACK}"
+    )
+
+    local picked
+    if command -v fzf &> /dev/null; then
+        picked="$(fzf_pick "${MSG_BEAUTIFY_TITLE}" "${options[@]}")" || return 0
+    else
+        echo -e "${BOLD}${CYAN}${MSG_BEAUTIFY_TITLE}${RESET}"
+        printf '  %s\n' "${options[@]}"
+        echo -n "> "
+        read -r raw
+        picked="${raw}) "
+    fi
+
+    case "$picked" in
+        1*) beautify_apply "dracula" ;;
+        2*) beautify_apply "catppuccin" ;;
+        3*) beautify_apply "nord" ;;
+        4*) beautify_uninstall ;;
+        0*|"") return 0 ;;
+        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
+    esac
+}
+
+# ============================================================
 # 主菜单 / Main menu (fzf-driven)
 # ============================================================
 show_menu() {
@@ -417,13 +664,14 @@ show_menu() {
             "4) ${OPT_SYSTEM_INFO}"
             "5) ${OPT_MIRROR}"
             "6) ${OPT_LANGUAGE}"
-            "7) ${OPT_EXIT}"
+            "7) ${OPT_BEAUTIFY}"
+            "8) ${OPT_EXIT}"
         )
 
         echo ""
         local picked
         if command -v fzf &> /dev/null; then
-            picked="$(fzf_pick "${MENU_TITLE}" "${options[@]}")" || picked="7"
+            picked="$(fzf_pick "${MENU_TITLE}" "${options[@]}")" || picked="8"
         else
             echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
             printf '  %s\n' "${options[@]}"
@@ -439,7 +687,8 @@ show_menu() {
             4*) show_system_info ;;
             5*) configure_mirror ;;
             6*) change_language ;;
-            7*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            7*) beautify_menu ;;
+            8*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
             *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
         esac
 
