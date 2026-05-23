@@ -91,13 +91,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 # Source: main program in project directory
 TUI_SOURCE="$SCRIPT_DIR/tui/termux-tools"
 
-# 目标：用户本地 bin 目录
-# Target: user local bin directory
-TUI_TARGET="$HOME/.local/bin/termux-tools"
-
-# 创建目录（-p：父目录不存在时一起创建，已存在不报错）
-# Create directory (-p: create parents, no error if exists)
-mkdir -p "$HOME/.local/bin"
+# 目标：Termux 默认的可执行目录（始终在 PATH 中）
+# Target: Termux's default bin directory (always in PATH)
+#   $PREFIX 是 Termux 内置变量，指向 /data/data/com.termux/files/usr
+#   $PREFIX is a Termux built-in pointing to /data/data/com.termux/files/usr
+TUI_TARGET="$PREFIX/bin/termux-tools"
 
 # 复制主程序
 # Copy main program
@@ -109,33 +107,16 @@ cp "$TUI_SOURCE" "$TUI_TARGET"
 chmod +x "$TUI_TARGET"
 
 # ============================================================
-# 配置 PATH
-# Configure PATH
-# ============================================================
-
-# 检查 ~/.local/bin 是否已在 PATH 中
-# Check whether ~/.local/bin is already in PATH
-#   ":$PATH:": 两端加冒号便于子串匹配 / wrap with colons for substring match
-#   != *":...:"*: 通配符不匹配（说明不在）/ glob mismatch means not in PATH
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    # 把 export 行追加到 ~/.bashrc
-    # Append export line to ~/.bashrc
-    #   >>: 追加重定向 / append redirect
-    #   单引号防止变量提前展开 / single quotes prevent early expansion
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-
-    # 立即在当前 shell 中生效
-    # Apply to current shell session
-    export PATH="$HOME/.local/bin:$PATH"
-fi
-
-# ============================================================
-# 安装完成提示
-# Installation complete message
+# 安装完成提示并自动启动 TUI
+# Installation complete; auto-launch TUI
 # ============================================================
 echo ""
 echo "安装完成！ / Installation complete!"
-echo "运行 'termux-tools' 启动 TUI 工具。"
-echo "Run 'termux-tools' to launch the TUI tool."
-echo "运行 'termux-tools help' 查看帮助。"
-echo "Run 'termux-tools help' to view help."
+echo "正在启动 termux-tools... / Launching termux-tools..."
+echo ""
+
+# 用 exec 替换当前进程，让 TUI 直接接管终端
+# Use exec to replace current process so TUI takes over the terminal
+#   这样退出 TUI 时会回到调用 install.sh 之前的 shell
+#   This way, exiting the TUI returns to the shell that ran install.sh
+exec "$TUI_TARGET"
