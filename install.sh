@@ -83,12 +83,12 @@ pkg install -y "${PACKAGES[@]}"
 # Deploy TUI main program
 # ============================================================
 
-# 获取脚本所在目录的绝对路径
-# Get absolute path of script directory
+# 获取脚本所在目录的绝对路径（仓库根目录）
+# Get absolute path of script directory (the repo root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
 # 源文件：项目目录中的主程序
-# Source: main program in project directory
+# Source: main program in the project directory
 TUI_SOURCE="$SCRIPT_DIR/tui/termux-tools"
 
 # 目标：Termux 默认的可执行目录（始终在 PATH 中）
@@ -97,14 +97,23 @@ TUI_SOURCE="$SCRIPT_DIR/tui/termux-tools"
 #   $PREFIX is a Termux built-in pointing to /data/data/com.termux/files/usr
 TUI_TARGET="$PREFIX/bin/termux-tools"
 
-# 复制主程序
-# Copy main program
-cp "$TUI_SOURCE" "$TUI_TARGET"
+# 清理旧的安装（可能是上一版的复制文件，会找不到 lang/）
+# Clean up any old install (a stale copy from previous version
+# would fail to locate lang/)
+#   -f: 文件不存在不报错 / no error if missing
+rm -f "$TUI_TARGET"
 
-# 添加可执行权限
-# Add executable permission
-#   +x: 增加 execute 权限 / add execute permission
-chmod +x "$TUI_TARGET"
+# 用符号链接而不是复制：脚本始终从仓库目录运行，
+# 这样能找到 lang/、scripts/version 和 .git，更新只需 git pull
+# Use a symlink instead of copying: the script always runs from the
+# repo directory so it can find lang/, scripts/version, and .git;
+# updates are just `git pull`
+#   -s: 创建符号链接 / create symbolic link
+ln -s "$TUI_SOURCE" "$TUI_TARGET"
+
+# 添加可执行权限（链接目标的权限）
+# Ensure the link target is executable
+chmod +x "$TUI_SOURCE"
 
 # ============================================================
 # 安装完成提示并自动启动 TUI
