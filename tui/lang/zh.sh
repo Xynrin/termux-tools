@@ -58,6 +58,12 @@ MSG_MIRROR_APPLYING="正在应用镜像"
 MSG_MIRROR_APPLIED="镜像已应用"
 MSG_MIRROR_UPDATING="正在更新软件源索引..."
 MSG_MIRROR_UPDATE_WARN="索引更新失败，镜像可能无法访问。"
+MSG_MIRROR_BACKUP_WARN="无法备份 sources.list（继续）。"
+MSG_MIRROR_WRITE_FAIL="无法写入 sources.list"
+
+# fzf
+MSG_FZF_INSTALLING="未检测到 fzf，正在安装..."
+MSG_FZF_FALLBACK="fzf 不可用，使用回退提示"
 
 # CLI 命令 / CLI
 CLI_HELP_USAGE="用法：xynrin [命令]"
