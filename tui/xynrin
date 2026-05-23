@@ -1,103 +1,67 @@
 #!/usr/bin/env bash
 #
-# xynrin - Termux 辅助 TUI 工具 / Termux helper TUI tool
-# License: GPL-v3
-# Author:  Xynrin
-# Repo:    https://github.com/Xynrin/termux-tools
+# xynrin - Termux 辅助 TUI / Termux helper TUI (薄派发壳 / thin dispatcher)
+# License: GPL-v3   Author: Xynrin   Repo: https://github.com/Xynrin/termux-tools
 #
-set -uo pipefail   # 不用 -e：交互式 TUI 需要容忍单步失败 / no -e: tolerate step failures in interactive TUI
+# 这个壳负责：
+#   1. 解析路径、加载语言包
+#   2. 把 --menu-* / 顶级子命令派发到 tui/modules/*.sh
+#   3. 提供纯 bash 兜底菜单（Rust 二进制不可用时）
+# This shell:
+#   1. Resolves paths, loads language pack
+#   2. Dispatches --menu-* / top-level subcommands to tui/modules/*.sh
+#   3. Provides a pure-bash fallback menu (when the Rust binary is unavailable)
+#
+set -uo pipefail
 
-# ============================================================
-# 路径解析（跟随符号链接）/ Path resolution (follow symlinks)
-# ============================================================
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 VERSION_FILE="$PROJECT_ROOT/scripts/version"
 LANG_DIR="$SCRIPT_DIR/lang"
-INSTALL_SCRIPT="$PROJECT_ROOT/install.sh"
-ALIASES_FILE="$PROJECT_ROOT/.aliases"
+MODULES_DIR="$SCRIPT_DIR/modules"
+LANG_PREF_FILE="$PROJECT_ROOT/.lang_pref"
 
-REPO_HTTPS="https://github.com/Xynrin/termux-tools"
-REPO_RAW="https://raw.githubusercontent.com/Xynrin/termux-tools/main"
-
-CURRENT_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")"
+CURRENT_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || echo unknown)"
 AUTHOR="Xynrin"
+REPO_HTTPS="https://github.com/Xynrin/termux-tools"
 
-# ============================================================
-# 颜色 / Colors
-# ============================================================
 RED='\e[31m'; GREEN='\e[32m'; YELLOW='\e[33m'; BLUE='\e[34m'
-MAGENTA='\e[35m'; CYAN='\e[36m'; ORANGE='\e[38;5;202m'
-BOLD='\e[1m'; RESET='\e[0m'
+CYAN='\e[36m'; ORANGE='\e[38;5;202m'; BOLD='\e[1m'; RESET='\e[0m'
 
 # ============================================================
 # 语言加载 / Language loading
 # ============================================================
-LANG_PREF_FILE="$PROJECT_ROOT/.lang_pref"
-
 detect_language() {
-    local lang_env="${LANG:-${LC_ALL:-en_US}}"
-    if [[ "$lang_env" == *zh* ]] || [[ "$lang_env" == *CN* ]] || [[ "$lang_env" == *TW* ]]; then
-        echo "zh"
-    else
-        echo "en"
-    fi
+    local e="${LANG:-${LC_ALL:-en_US}}"
+    [[ "$e" == *zh* || "$e" == *CN* || "$e" == *TW* ]] && echo "zh" || echo "en"
 }
-
-get_language_pref() {
-    [[ -f "$LANG_PREF_FILE" ]] && cat "$LANG_PREF_FILE" || detect_language
-}
-
-save_language_pref() {
-    echo "$1" > "$LANG_PREF_FILE"
-}
-
+get_language_pref() { [[ -f "$LANG_PREF_FILE" ]] && cat "$LANG_PREF_FILE" || detect_language; }
 load_language() {
     local code="${1:-$(detect_language)}"
-    local file="$LANG_DIR/${code}.sh"
-    [[ -f "$file" ]] && source "$file" || source "$LANG_DIR/en.sh"
+    local f="$LANG_DIR/${code}.sh"
+    [[ -f "$f" ]] && source "$f" || source "$LANG_DIR/en.sh"
 }
 
 # ============================================================
-# fzf 自动安装 / Auto-install fzf
+# 模块加载 / Module loading
+# ============================================================
+load_module() { source "$MODULES_DIR/$1.sh"; }
+
+# ============================================================
+# fzf 自动安装 / Auto-install fzf (兜底菜单需要)
 # ============================================================
 ensure_fzf() {
-    if command -v fzf &> /dev/null; then
-        return 0
-    fi
-    echo -e "${YELLOW}${MSG_FZF_INSTALLING:-Installing fzf...}${RESET}"
-    if command -v pkg &> /dev/null; then
-        pkg install -y fzf || return 1
-    elif command -v apt &> /dev/null; then
-        apt install -y fzf || return 1
-    else
-        return 1
-    fi
-}
-
-# fzf 选择封装：返回选中行（去除前缀编号）
-# fzf wrapper: returns selected line (without leading index)
-# 用法 / Usage: fzf_pick "Title" "1) Option A" "2) Option B" ...
-fzf_pick() {
-    local title="$1"; shift
-    printf '%s\n' "$@" | fzf \
-        --ansi \
-        --prompt="$title > " \
-        --height=40% \
-        --reverse \
-        --no-info \
-        --border=rounded \
-        --color='border:cyan,prompt:yellow,pointer:green,marker:green'
+    command -v fzf &> /dev/null && return 0
+    command -v pkg &> /dev/null && pkg install -y fzf &> /dev/null
 }
 
 # ============================================================
-# Logo / Banner
+# Banner（纯 bash 模式打印；Rust 模式由 ratatui 画）
 # ============================================================
 show_logo() {
-    local c1='\e[38;5;202m' c2='\e[38;5;208m' c3='\e[38;5;214m'
-    local c4='\e[38;5;220m' c5='\e[38;5;226m'
+    local c1='\e[38;5;202m' c2='\e[38;5;208m' c3='\e[38;5;214m' c4='\e[38;5;220m' c5='\e[38;5;226m'
     echo ""
     echo -e "${BOLD}${c1} ██╗  ██╗██╗   ██╗███╗   ██╗██████╗ ██╗███╗   ██╗${RESET}"
     echo -e "${BOLD}${c2} ╚██╗██╔╝╚██╗ ██╔╝████╗  ██║██╔══██╗██║████╗  ██║${RESET}"
@@ -105,10 +69,8 @@ show_logo() {
     echo -e "${BOLD}${c4}  ██╔██╗   ╚██╔╝  ██║╚██╗██║██╔══██╗██║██║╚██╗██║${RESET}"
     echo -e "${BOLD}${c5} ██╔╝ ██╗   ██║   ██║ ╚████║██║  ██║██║██║ ╚████║${RESET}"
     echo -e "${BOLD}${c5} ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝${RESET}"
-    echo -e "${BOLD}${ORANGE}              T E R M U X   T O O L S${RESET}"
     echo ""
 }
-
 show_banner() {
     show_logo
     echo -e "  ${BOLD}${CYAN}Version${RESET}  ${GREEN}v${CURRENT_VERSION}${RESET}"
@@ -118,588 +80,7 @@ show_banner() {
 }
 
 # ============================================================
-# 1. 自我更新 / Self-update
-# ============================================================
-do_update() {
-    echo -e "${CYAN}${MSG_UPDATING}${RESET}"
-    local remote=""
-
-    # 优先用 git ls-remote 查最新 tag：实时、不走 CDN 缓存、无 API 限额
-    # Prefer git ls-remote tags: real-time, no CDN cache, no API limits
-    if command -v git &> /dev/null; then
-        remote="$(git ls-remote --tags --refs "$REPO_HTTPS" 2>/dev/null \
-            | awk -F'refs/tags/v' 'NF==2 {print $2}' \
-            | sort -V | tail -n1)"
-    fi
-
-    # 回退：CDN 上的版本文件（带时间戳防缓存）
-    # Fallback: CDN version file (with cache-buster)
-    if [[ -z "$remote" ]]; then
-        remote="$(curl -sL -H 'Cache-Control: no-cache' \
-            "${REPO_RAW}/scripts/version?t=$(date +%s)" 2>/dev/null \
-            | tr -d '[:space:]')"
-    fi
-
-    if [[ -z "$remote" ]]; then
-        echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
-        return 1
-    fi
-
-    echo -e "${MSG_CURRENT_VERSION}: ${GREEN}${CURRENT_VERSION}${RESET}"
-    echo -e "${MSG_LATEST_VERSION}:  ${GREEN}${remote}${RESET}"
-
-    if [[ "$CURRENT_VERSION" == "$remote" ]]; then
-        echo -e "${GREEN}${MSG_ALREADY_LATEST}${RESET}"
-        return 0
-    fi
-
-    echo -e "${YELLOW}${MSG_UPDATE_AVAILABLE}${RESET} (${CURRENT_VERSION} -> ${remote})"
-
-    if ! command -v git &> /dev/null || [[ ! -d "$PROJECT_ROOT/.git" ]]; then
-        echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
-        return 1
-    fi
-
-    # 丢弃跟踪文件的本地改动，避免 git pull 因冲突中止
-    # Discard local changes to tracked files so git pull won't abort
-    # (xynrin/install.sh 等都是仓库管理文件，本地改动通常是误入)
-    ( cd "$PROJECT_ROOT" && git checkout -- . 2>/dev/null || true )
-    ( cd "$PROJECT_ROOT" && git pull --ff-only origin main )
-
-    echo -e "${CYAN}${MSG_APPLYING_MIGRATION}${RESET}"
-    bash "$INSTALL_SCRIPT" --upgrade
-    echo -e "${GREEN}${MSG_UPDATE_DONE}${RESET}"
-}
-
-# ============================================================
-# 2. 安装 proot 发行版 / Install proot distro
-# ============================================================
-proot_install() {
-    if ! command -v proot-distro &> /dev/null; then
-        echo -e "${RED}proot-distro not found${RESET}"
-        return 1
-    fi
-
-    # 列出 proot-distro 支持的发行版供选择 / list available distros
-    local available
-    available="$(proot-distro list 2>/dev/null \
-        | awk '/^[[:space:]]*[a-z][a-z0-9-]*[[:space:]]*$/{print $1}' \
-        | sort -u)"
-
-    # 兼容老格式 / fallback if format differs
-    if [[ -z "$available" ]]; then
-        available="ubuntu
-debian
-archlinux
-fedora
-alpine
-void
-opensuse"
-    fi
-
-    local picked
-    if command -v fzf &> /dev/null; then
-        picked="$(echo "$available" | fzf \
-            --prompt="${MSG_PROOT_DISTRO_NAME} > " \
-            --height=50% --reverse --no-info --border=rounded \
-            --color='border:cyan,prompt:yellow,pointer:green')" || return 0
-    else
-        echo -e "${CYAN}${MSG_PROOT_DISTRO_NAME}${RESET}"
-        echo -e "${YELLOW}${MSG_PROOT_DISTRO_EXAMPLE}${RESET}"
-        echo -n "> "
-        read -r picked
-    fi
-
-    if [[ -z "$picked" ]]; then
-        echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}"
-        return 1
-    fi
-
-    echo -e "${CYAN}${MSG_PROOT_INSTALLING} ${picked}...${RESET}"
-    if proot-distro install "$picked"; then
-        setup_distro_alias "$picked"
-        echo -e "${GREEN}${MSG_PROOT_INSTALL_DONE}${RESET}"
-        echo -e "${CYAN}${MSG_ALIAS_CONFIGURED}: ${BOLD}${picked}${RESET}"
-        echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
-    else
-        echo -e "${RED}${MSG_PROOT_INSTALL_FAILED}${RESET}"
-    fi
-}
-
-setup_distro_alias() {
-    local distro="$1"
-    local alias_line="alias ${distro}='proot-distro login ${distro}'"
-    local rc="$HOME/.bashrc"
-    touch "$rc"
-    grep -qF "$alias_line" "$rc" 2>/dev/null || echo "$alias_line" >> "$rc"
-    grep -qx "$distro" "$ALIASES_FILE" 2>/dev/null || echo "$distro" >> "$ALIASES_FILE"
-}
-
-# ============================================================
-# 3. 列出已安装且已配置别名的发行版 / List real, usable aliases
-# ============================================================
-list_installed_distros() {
-    # 兼容多种 proot-distro 输出格式 / compatible with multiple proot-distro output formats
-    # 老版格式：以小写字母开头 / old: lowercase-leading
-    # 新版格式：'* ubuntu' 或缩进 / new: '* ubuntu' or indented
-    proot-distro list --installed 2>/dev/null \
-        | sed -E 's/^[[:space:]]*\*?[[:space:]]*//' \
-        | awk '/^[a-z][a-z0-9-]*([[:space:]]|$)/{print $1}' \
-        | sort -u
-}
-
-list_aliases() {
-    echo -e "${BOLD}${CYAN}${MSG_ALIASES_TITLE}${RESET}"
-    echo ""
-
-    if ! command -v proot-distro &> /dev/null; then
-        echo -e "  ${YELLOW}${MSG_PROOT_NOT_INSTALLED}${RESET}"
-        return 0
-    fi
-
-    local installed
-    installed="$(list_installed_distros || true)"
-
-    if [[ -z "$installed" ]]; then
-        echo -e "  ${YELLOW}${MSG_PROOT_NOT_INSTALLED}${RESET}"
-        return 0
-    fi
-
-    local rc="$HOME/.bashrc"
-    local found=0
-    local distro
-    while IFS= read -r distro; do
-        [[ -z "$distro" ]] && continue
-        local alias_line="alias ${distro}='proot-distro login ${distro}'"
-        if [[ -f "$rc" ]] && grep -qF "$alias_line" "$rc" 2>/dev/null; then
-            echo -e "  ${GREEN}${distro}${RESET}  →  proot-distro login ${distro}"
-            found=1
-        else
-            # 已安装但没别名：自动补上 / installed but no alias: add it now
-            setup_distro_alias "$distro"
-            echo -e "  ${GREEN}${distro}${RESET}  →  proot-distro login ${distro}  ${YELLOW}(auto-added)${RESET}"
-            found=1
-        fi
-    done <<< "$installed"
-
-    if [[ $found -eq 0 ]]; then
-        echo -e "  ${YELLOW}${MSG_NO_ALIAS}${RESET}"
-        return 0
-    fi
-
-    echo ""
-    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
-}
-
-# ============================================================
-# 4. 系统信息 / System info
-# ============================================================
-show_system_info() {
-    echo -e "${BOLD}${CYAN}${MSG_SYSTEM_INFO}${RESET}"
-    echo -e "  ${GREEN}${MSG_OS}:${RESET}        $(uname -o 2>/dev/null || uname -s)"
-    echo -e "  ${GREEN}${MSG_ARCH}:${RESET}        $(uname -m)"
-    echo -e "  ${GREEN}${MSG_KERNEL}:${RESET}      $(uname -r)"
-    echo -e "  ${GREEN}${MSG_SHELL}:${RESET}       $SHELL"
-    [[ -n "${TERMUX_VERSION:-}" ]] && \
-        echo -e "  ${GREEN}${MSG_TERMUX_VERSION}:${RESET} ${TERMUX_VERSION}"
-    if command -v fastfetch &> /dev/null; then
-        echo ""
-        fastfetch || true
-    fi
-}
-
-# ============================================================
-# 5. 镜像源 / Mirror sources
-# ============================================================
-configure_mirror() {
-    local options=(
-        "1) ${MSG_MIRROR_INTERACTIVE} (termux-change-repo)"
-        "2) ${MSG_MIRROR_TSINGHUA}"
-        "3) ${MSG_MIRROR_USTC}"
-        "4) ${MSG_MIRROR_OFFICIAL}"
-        "0) ${OPT_BACK}"
-    )
-
-    local picked
-    if command -v fzf &> /dev/null; then
-        picked="$(fzf_pick "${MSG_MIRROR_TITLE}" "${options[@]}")" || return 0
-    else
-        echo -e "${BOLD}${CYAN}${MSG_MIRROR_TITLE}${RESET}"
-        printf '  %s\n' "${options[@]}"
-        echo -n "> "
-        read -r raw
-        picked="${raw}) "
-    fi
-
-    case "$picked" in
-        1*)
-            if command -v termux-change-repo &> /dev/null; then
-                termux-change-repo || true
-            else
-                echo -e "${RED}termux-change-repo not found${RESET}"
-                echo -e "${YELLOW}pkg install termux-tools${RESET}"
-            fi
-            ;;
-        2*) apply_mirror "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main" "Tsinghua" ;;
-        3*) apply_mirror "https://mirrors.ustc.edu.cn/termux/apt/termux-main" "USTC" ;;
-        4*) apply_mirror "https://packages.termux.dev/apt/termux-main" "Official" ;;
-        0*|"") return 0 ;;
-        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
-    esac
-}
-
-apply_mirror() {
-    local url="$1"
-    local name="$2"
-    local sources="$PREFIX/etc/apt/sources.list"
-
-    echo -e "${CYAN}${MSG_MIRROR_APPLYING} ${name}...${RESET}"
-
-    # 安全备份：仅在源文件存在时备份 / Backup only if source exists
-    if [[ -f "$sources" ]]; then
-        cp "$sources" "${sources}.bak.$(date +%s)" 2>/dev/null || \
-            echo -e "${YELLOW}${MSG_MIRROR_BACKUP_WARN}${RESET}"
-    fi
-
-    # 写入新源；若无写权限就报错而不是退出 / Write new source; warn on perm issue
-    if ! echo "deb $url stable main" > "$sources" 2>/dev/null; then
-        echo -e "${RED}${MSG_MIRROR_WRITE_FAIL}: $sources${RESET}"
-        return 1
-    fi
-
-    echo -e "${GREEN}${MSG_MIRROR_APPLIED}: ${name}${RESET}"
-    echo -e "${CYAN}${MSG_MIRROR_UPDATING}${RESET}"
-    pkg update -y || echo -e "${YELLOW}${MSG_MIRROR_UPDATE_WARN}${RESET}"
-}
-
-# ============================================================
-# 6. 切换语言 / Change language
-# ============================================================
-change_language() {
-    local options=(
-        "1) 中文 (zh)"
-        "2) English (en)"
-        "0) ${OPT_BACK}"
-    )
-
-    local picked
-    if command -v fzf &> /dev/null; then
-        picked="$(fzf_pick "${LANG_TITLE}" "${options[@]}")" || return 0
-    else
-        echo -e "${BOLD}${LANG_TITLE}${RESET}"
-        printf '  %s\n' "${options[@]}"
-        echo -n "> "
-        read -r raw
-        picked="${raw}) "
-    fi
-
-    case "$picked" in
-        1*) save_language_pref "zh"; load_language "zh"
-            echo -e "${GREEN}${MSG_LANG_SWITCHED}${RESET}" ;;
-        2*) save_language_pref "en"; load_language "en"
-            echo -e "${GREEN}${MSG_LANG_SWITCHED}${RESET}" ;;
-        0*|"") return 0 ;;
-        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
-    esac
-}
-
-# ============================================================
-# 7. 美化 Termux / Beautify Termux
-# ============================================================
-# 美化标记：写入 colors.properties 顶部，便于卸载时识别
-# Marker line written at top of colors.properties for uninstall detection
-BEAUTIFY_MARKER="# xynrin-beautify"
-
-beautify_apply() {
-    local theme="$1"
-    local props="$HOME/.termux/termux.properties"
-    local colors="$HOME/.termux/colors.properties"
-    local font="$HOME/.termux/font.ttf"
-
-    mkdir -p "$HOME/.termux"
-
-    # 备份现有配置 / Backup existing configs
-    local ts="$(date +%s)"
-    [[ -f "$colors" ]] && cp "$colors" "${colors}.bak.${ts}"
-    [[ -f "$props" ]] && cp "$props" "${props}.bak.${ts}"
-    [[ -f "$font" ]] && cp "$font" "${font}.bak.${ts}"
-
-    # 写主题配色 / Write theme colors
-    case "$theme" in
-        dracula)
-            cat > "$colors" <<'EOF'
-# xynrin-beautify: dracula
-foreground=#f8f8f2
-background=#282a36
-cursor=#f8f8f2
-color0=#000000
-color1=#ff5555
-color2=#50fa7b
-color3=#f1fa8c
-color4=#bd93f9
-color5=#ff79c6
-color6=#8be9fd
-color7=#bfbfbf
-color8=#4d4d4d
-color9=#ff6e67
-color10=#5af78e
-color11=#f4f99d
-color12=#caa9fa
-color13=#ff92d0
-color14=#9aedfe
-color15=#e6e6e6
-EOF
-            ;;
-        catppuccin)
-            cat > "$colors" <<'EOF'
-# xynrin-beautify: catppuccin
-foreground=#cdd6f4
-background=#1e1e2e
-cursor=#f5e0dc
-color0=#45475a
-color1=#f38ba8
-color2=#a6e3a1
-color3=#f9e2af
-color4=#89b4fa
-color5=#f5c2e7
-color6=#94e2d5
-color7=#bac2de
-color8=#585b70
-color9=#f38ba8
-color10=#a6e3a1
-color11=#f9e2af
-color12=#89b4fa
-color13=#f5c2e7
-color14=#94e2d5
-color15=#a6adc8
-EOF
-            ;;
-        nord)
-            cat > "$colors" <<'EOF'
-# xynrin-beautify: nord
-foreground=#d8dee9
-background=#2e3440
-cursor=#d8dee9
-color0=#3b4252
-color1=#bf616a
-color2=#a3be8c
-color3=#ebcb8b
-color4=#81a1c1
-color5=#b48ead
-color6=#88c0d0
-color7=#e5e9f0
-color8=#4c566a
-color9=#bf616a
-color10=#a3be8c
-color11=#ebcb8b
-color12=#81a1c1
-color13=#b48ead
-color14=#8fbcbb
-color15=#eceff4
-EOF
-            ;;
-    esac
-
-    # 写 properties（光标平滑 + 圆角光标 + extra-keys）
-    # Write properties (smooth cursor + extra keys)
-    cat > "$props" <<'EOF'
-# xynrin-beautify
-terminal-cursor-style = bar
-terminal-cursor-blink-rate = 500
-extra-keys = [['ESC','/','-','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]
-EOF
-
-    # 安装等宽字体（JetBrains Mono Nerd 备用源）
-    # Install programming font with fallback URL
-    if ! command -v curl &> /dev/null; then
-        pkg install -y curl &> /dev/null || true
-    fi
-    echo -e "${CYAN}${MSG_BEAUTIFY_DOWNLOADING_FONT}${RESET}"
-    local font_url="https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/JetBrainsMono/Ligatures/Regular/JetBrainsMonoNerdFont-Regular.ttf"
-    if ! curl -fsSL --connect-timeout 10 "$font_url" -o "$font" 2>/dev/null; then
-        echo -e "${YELLOW}${MSG_BEAUTIFY_FONT_FAIL}${RESET}"
-    fi
-
-    # 安装 starship 提示符（如未装）/ Install starship prompt
-    if ! command -v starship &> /dev/null; then
-        echo -e "${CYAN}${MSG_BEAUTIFY_INSTALLING_STARSHIP}${RESET}"
-        pkg install -y starship &> /dev/null || true
-    fi
-
-    # 写 starship 配置 / Starship config
-    mkdir -p "$HOME/.config"
-    cat > "$HOME/.config/starship.toml" <<'EOF'
-# xynrin-beautify
-add_newline = true
-format = "[┏](bold green) $username$hostname$directory$git_branch$git_status\n[┗](bold green) $character"
-
-[character]
-success_symbol = "[❯](bold green)"
-error_symbol = "[❯](bold red)"
-
-[directory]
-style = "bold cyan"
-truncation_length = 3
-
-[git_branch]
-symbol = " "
-style = "bold purple"
-EOF
-
-    # 启用 starship（追加到 .bashrc）/ Enable starship in .bashrc
-    local rc="$HOME/.bashrc"
-    touch "$rc"
-    if ! grep -qF 'starship init bash' "$rc"; then
-        echo '' >> "$rc"
-        echo '# xynrin-beautify' >> "$rc"
-        echo 'eval "$(starship init bash)"' >> "$rc"
-    fi
-
-    # 重载 termux 配置 / Reload termux UI
-    command -v termux-reload-settings &> /dev/null && termux-reload-settings || true
-
-    echo -e "${GREEN}${MSG_BEAUTIFY_APPLIED}: ${theme}${RESET}"
-    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
-}
-
-# 检测已有美化标记 / Detect existing beautify marker
-beautify_detect() {
-    local found=()
-    [[ -f "$HOME/.termux/colors.properties" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/colors.properties" 2>/dev/null && \
-        found+=("colors.properties")
-    [[ -f "$HOME/.termux/termux.properties" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/termux.properties" 2>/dev/null && \
-        found+=("termux.properties")
-    [[ -f "$HOME/.config/starship.toml" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.config/starship.toml" 2>/dev/null && \
-        found+=("starship.toml")
-    [[ -f "$HOME/.bashrc" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.bashrc" 2>/dev/null && \
-        found+=(".bashrc(starship)")
-    [[ -f "$HOME/.termux/font.ttf" ]] && found+=("font.ttf")
-    printf '%s\n' "${found[@]}"
-}
-
-beautify_uninstall() {
-    local detected
-    detected="$(beautify_detect)"
-
-    if [[ -z "$detected" ]]; then
-        echo -e "${YELLOW}${MSG_BEAUTIFY_NONE_FOUND}${RESET}"
-        return 0
-    fi
-
-    echo -e "${CYAN}${MSG_BEAUTIFY_DETECTED}:${RESET}"
-    while IFS= read -r f; do
-        echo -e "  - ${YELLOW}${f}${RESET}"
-    done <<< "$detected"
-    echo ""
-
-    # 删除带标记的文件 / Remove marker-tagged files
-    [[ -f "$HOME/.termux/colors.properties" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/colors.properties" 2>/dev/null && \
-        rm -f "$HOME/.termux/colors.properties"
-    [[ -f "$HOME/.termux/termux.properties" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.termux/termux.properties" 2>/dev/null && \
-        rm -f "$HOME/.termux/termux.properties"
-    [[ -f "$HOME/.config/starship.toml" ]] && \
-        grep -q "$BEAUTIFY_MARKER" "$HOME/.config/starship.toml" 2>/dev/null && \
-        rm -f "$HOME/.config/starship.toml"
-    rm -f "$HOME/.termux/font.ttf"
-
-    # 移除 .bashrc 中的 starship 行（含标记块）
-    # Strip the marker block from .bashrc
-    if [[ -f "$HOME/.bashrc" ]] && grep -q "$BEAUTIFY_MARKER" "$HOME/.bashrc" 2>/dev/null; then
-        sed -i '/# xynrin-beautify/,+1d' "$HOME/.bashrc"
-    fi
-
-    command -v termux-reload-settings &> /dev/null && termux-reload-settings || true
-
-    echo -e "${GREEN}${MSG_BEAUTIFY_REMOVED}${RESET}"
-    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
-}
-
-beautify_menu() {
-    local options=(
-        "1) ${MSG_BEAUTIFY_DRACULA}"
-        "2) ${MSG_BEAUTIFY_CATPPUCCIN}"
-        "3) ${MSG_BEAUTIFY_NORD}"
-        "4) ${MSG_BEAUTIFY_UNINSTALL}"
-        "0) ${OPT_BACK}"
-    )
-
-    local picked
-    if command -v fzf &> /dev/null; then
-        picked="$(fzf_pick "${MSG_BEAUTIFY_TITLE}" "${options[@]}")" || return 0
-    else
-        echo -e "${BOLD}${CYAN}${MSG_BEAUTIFY_TITLE}${RESET}"
-        printf '  %s\n' "${options[@]}"
-        echo -n "> "
-        read -r raw
-        picked="${raw}) "
-    fi
-
-    case "$picked" in
-        1*) beautify_apply "dracula" ;;
-        2*) beautify_apply "catppuccin" ;;
-        3*) beautify_apply "nord" ;;
-        4*) beautify_uninstall ;;
-        0*|"") return 0 ;;
-        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
-    esac
-}
-
-# ============================================================
-# 主菜单 / Main menu (fzf-driven)
-# ============================================================
-show_menu() {
-    while true; do
-        # 每轮重新构造，使切换语言后菜单文案立即刷新
-        # Rebuild each loop so menu text refreshes after language switch
-        local options=(
-            "1) ${OPT_UPDATE}"
-            "2) ${OPT_PROOT_INSTALL}"
-            "3) ${OPT_LIST_ALIASES}"
-            "4) ${OPT_SYSTEM_INFO}"
-            "5) ${OPT_MIRROR}"
-            "6) ${OPT_LANGUAGE}"
-            "7) ${OPT_BEAUTIFY}"
-            "8) ${OPT_EXIT}"
-        )
-
-        echo ""
-        local picked
-        if command -v fzf &> /dev/null; then
-            picked="$(fzf_pick "${MENU_TITLE}" "${options[@]}")" || picked="8"
-        else
-            echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
-            printf '  %s\n' "${options[@]}"
-            echo -n "> "
-            read -r raw
-            picked="${raw}) "
-        fi
-
-        case "$picked" in
-            1*) do_update ;;
-            2*) proot_install ;;
-            3*) list_aliases ;;
-            4*) show_system_info ;;
-            5*) configure_mirror ;;
-            6*) change_language ;;
-            7*) beautify_menu ;;
-            8*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
-            *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
-        esac
-
-        echo ""
-        echo -n "${MSG_PRESS_ENTER}"
-        read -r _ || true
-    done
-}
-
-# ============================================================
-# CLI / CLI commands
+# CLI helpers
 # ============================================================
 show_help() {
     show_banner
@@ -711,8 +92,52 @@ show_help() {
     echo -e "${CLI_HELP_VERSION}"
     echo -e "${CLI_HELP_UPDATE}"
 }
-
 show_version() { echo "xynrin v${CURRENT_VERSION}"; }
+
+# ============================================================
+# 纯 bash 兜底菜单（Rust 二进制缺失时使用）
+# Pure-bash fallback menu (when Rust binary is missing)
+# ============================================================
+fallback_menu() {
+    while true; do
+        local options=(
+            "1) ${OPT_UPDATE}"
+            "2) ${OPT_PROOT_INSTALL}"
+            "3) ${OPT_LIST_ALIASES}"
+            "4) ${OPT_SYSTEM_INFO}"
+            "5) ${OPT_MIRROR}"
+            "6) ${OPT_LANGUAGE}"
+            "7) ${OPT_BEAUTIFY}"
+            "8) ${OPT_EXIT}"
+        )
+        echo ""
+        local picked
+        if command -v fzf &> /dev/null; then
+            picked="$(printf '%s\n' "${options[@]}" | fzf --height=40% --reverse --no-info --border=rounded \
+                --prompt="${MENU_TITLE} > ")" || picked="8"
+        else
+            echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
+            printf '  %s\n' "${options[@]}"
+            echo -n "> "
+            read -r raw
+            picked="${raw}) "
+        fi
+        case "$picked" in
+            1*) load_module update;   update_check_action; update_apply_action ;;
+            2*) load_module proot;    proot_install_action ;;
+            3*) load_module proot;    proot_manage_menu ;;
+            4*) load_module sysinfo;  sysinfo_action ;;
+            5*) load_module mirror;   mirror_action ;;
+            6*) load_module language; language_action ;;
+            7*) load_module beautify; beautify_action ;;
+            8*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
+        esac
+        echo ""
+        echo -n "${MSG_PRESS_ENTER}"
+        read -r _ || true
+    done
+}
 
 # ============================================================
 # Entry / 入口
@@ -723,20 +148,32 @@ main() {
     case "${1:-menu}" in
         help|-h|--help)        show_help ;;
         version|-v|--version)  show_version ;;
-        update|-u|--update)    do_update ;;
-        # Rust TUI 调用的子命令分发 / Sub-commands invoked from the Rust TUI
-        --menu-update)         do_update ;;
-        --menu-proot-install)  ensure_fzf || true; proot_install ;;
-        --menu-list-aliases)   list_aliases ;;
-        --menu-system-info)    show_system_info ;;
-        --menu-mirror)         ensure_fzf || true; configure_mirror ;;
-        --menu-language)       ensure_fzf || true; change_language ;;
-        --menu-beautify)       ensure_fzf || true; beautify_menu ;;
+        update|-u|--update)
+            load_module update
+            update_check_action && update_apply_action
+            ;;
+        sysinfo)               load_module sysinfo;  sysinfo_action ;;
+
+        # Rust TUI 调用的子命令分发（v3.0.0 兼容）
+        # Subcommand dispatch from Rust TUI (v3.0.0 compatible)
+        --menu-update)         load_module update;   update_check_action; update_apply_action ;;
+        --menu-update-check)   load_module update;   update_check_action ;;
+        --menu-update-apply)   load_module update;   update_apply_action ;;
+        --menu-proot-install)  ensure_fzf; load_module proot;    proot_install_action ;;
+        --menu-proot-manage)   ensure_fzf; load_module proot;    proot_manage_menu ;;
+        --menu-proot-list)     load_module proot;    proot_list_action ;;
+        --menu-list-aliases)   load_module proot;    proot_list_action ;;        # v3.0 alias
+        --menu-system-info)    load_module sysinfo;  sysinfo_action ;;
+        --menu-mirror)         ensure_fzf; load_module mirror;   mirror_action ;;
+        --menu-language)       ensure_fzf; load_module language; language_action ;;
+        --menu-beautify)       ensure_fzf; load_module beautify; beautify_action ;;
+        --menu-bootstrap)      load_module bootstrap; bootstrap_action ;;
+
         menu|"")
-            ensure_fzf || echo -e "${YELLOW}${MSG_FZF_FALLBACK:-fzf unavailable, using fallback prompt}${RESET}"
+            ensure_fzf
             show_banner
             echo -e "${BOLD}${MSG_WELCOME}${RESET}"
-            show_menu
+            fallback_menu
             ;;
         *)
             echo -e "${RED}Unknown command: $1${RESET}"
