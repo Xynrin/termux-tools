@@ -50,6 +50,10 @@ get_language_pref() {
     [[ -f "$LANG_PREF_FILE" ]] && cat "$LANG_PREF_FILE" || detect_language
 }
 
+save_language_pref() {
+    echo "$1" > "$LANG_PREF_FILE"
+}
+
 load_language() {
     local code="${1:-$(detect_language)}"
     local file="$LANG_DIR/${code}.sh"
