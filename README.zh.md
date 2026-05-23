@@ -1,145 +1,97 @@
 <div align="center">
 
-# termux-tools
+# xynrin
 
 **为 Termux 小白打造的 TUI 辅助工具**
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](scripts/version)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](scripts/version)
 [![Platform](https://img.shields.io/badge/platform-Termux-black.svg)](https://termux.dev)
-[![Language](https://img.shields.io/badge/lang-Bash-89e051.svg)](https://www.gnu.org/software/bash/)
 
-[English README](README.md) · [报告 Bug](https://github.com/Xynrin/termux-tools/issues) · [功能建议](https://github.com/Xynrin/termux-tools/issues)
+[English README](README.md) · [Issues](https://github.com/Xynrin/termux-tools/issues)
 
 </div>
 
----
+> **v2.0.0**：命令名由 `termux-tools` 改为 `xynrin`（官方 `termux-tools` 包名冲突）。老用户只需运行一次 `termux-tools update`，会自动迁移。
 
-## 项目简介
-
-`termux-tools` 是一个面向 Termux 小白的 TUI 辅助工具，几次按键即可完成常见操作 —— 安装 Linux 发行版、管理 proot 环境、自我更新，无需记忆复杂命令。
-
-## 功能特性
-
-| | |
-|---|---|
-| **自动语言** | 检测 locale，自动显示中文或英文界面 |
-| **自我更新** | 对比本地与远程版本，一键拉取更新 |
-| **proot 助手** | 不用记完整命令即可安装/登录发行版 |
-| **系统信息** | 一键查看操作系统、内核、架构、Termux 版本 |
-| **CLI 模式** | 在 TUI 之外提供完整命令行接口 |
-| **零依赖** | 纯 Bash 实现，无需 dialog/whiptail/python |
-
-## 快速开始
+## 一行安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/Xynrin/termux-tools.git
-cd termux-tools
+curl -sL https://raw.githubusercontent.com/Xynrin/termux-tools/main/bootstrap.sh | bash
+```
 
-# 安装（在 Termux 中运行）
+引导脚本会：
+1. 显示 Logo + 版本号 + 作者 + 仓库地址
+2. 克隆仓库到 `~/termux-tools`
+3. 安装依赖并部署 `xynrin` 命令（避开官方 `termux-tools` 包名冲突）
+4. 通过 `proot-distro` 默认安装 Ubuntu，并配置别名（如 `ubuntu`）
+5. 打印已配置的别名后，自动进入 TUI
+
+## 手动安装
+
+```bash
+git clone https://github.com/Xynrin/termux-tools.git ~/termux-tools
+cd ~/termux-tools
 bash install.sh
-
-# 启动
-termux-tools
 ```
 
 ## 使用方法
 
-### 交互式 TUI
-
 ```bash
-termux-tools           # 打开主菜单
+xynrin              # 打开 TUI
+xynrin help         # CLI 帮助
+xynrin version      # 查看版本
+xynrin update       # 检查并拉取更新
 ```
 
-### 命令行
-
-```bash
-termux-tools help      # 查看帮助
-termux-tools version   # 查看当前版本
-termux-tools update    # 检查并拉取更新
-termux-tools menu      # 显式打开 TUI
-```
-
-### 菜单选项
+## TUI 菜单
 
 | 按键 | 功能 |
 |:---:|---|
-| `1` | 更新 termux-tools |
+| `1` | 更新 xynrin |
 | `2` | 使用 proot 安装发行版 |
-| `3` | 登录已安装的 proot 发行版 |
-| `4` | 查看系统信息 |
-| `5` | 切换界面语言 |
-| `0` | 退出 |
+| `3` | 列出发行版别名（只显示真实可用的） |
+| `4` | 系统信息 |
+| `5` | 添加或设置镜像源 |
+| `6` | 退出 |
+
+## 发行版别名
+
+通过选项 `2` 安装发行版后，会自动写入 `~/.bashrc` 别名。运行 `source ~/.bashrc`（或重启终端），就可直接登录：
+
+```bash
+ubuntu      # = proot-distro login ubuntu
+debian      # = proot-distro login debian
+```
+
+选项 `3` 只会展示**实际已安装并已配置别名**的容器，不会有失效条目。
+
+## 镜像源（选项 5）
+
+快速切换 Termux APT 镜像，内置：
+
+- 清华大学（中国）
+- 中科大（中国）
+- 官方 `packages.termux.dev`
+- 或调用 `termux-change-repo` 交互式选择
 
 ## 项目结构
 
 ```
 termux-tools/
-├── README.md              # 英文文档
-├── README.zh.md           # 中文文档
-├── LICENSE                # GPL-v3 许可证
-├── .gitignore             # Git 忽略规则
-├── install.sh             # 主安装脚本
+├── bootstrap.sh          # 一行命令在线安装入口
+├── install.sh            # 主安装脚本（被 bootstrap 调用）
+├── tui/
+│   ├── xynrin            # 主程序
+│   ├── termux-tools      # 旧版兼容垫片，自动迁移 v1 用户
+│   └── lang/{zh,en}.sh   # 语言包
 ├── install-scripts/
-│   └── install-tui        # TUI 独立安装脚本
-├── scripts/
-│   └── version            # 版本文件（用于更新检查）
-└── tui/
-    ├── termux-tools       # 主程序
-    └── lang/
-        ├── zh.sh          # 中文语言包
-        └── en.sh          # 英文语言包
+│   └── install-tui       # 软链刷新脚本
+├── scripts/version       # 版本文件
+├── LICENSE               # GPL-v3
+└── README.{md,zh.md}
 ```
-
-## 工作流程
-
-```
-                      ┌─────────────────┐
-                      │  termux-tools   │
-                      └────────┬────────┘
-                               │
-            ┌──────────────────┼──────────────────┐
-            ▼                  ▼                  ▼
-       ┌─────────┐        ┌─────────┐        ┌─────────┐
-       │   CLI   │        │   TUI   │        │  i18n   │
-       │ help/   │        │  菜单   │        │ 中/英   │
-       │version/ │        │ 循环    │        │  自动   │
-       │ update  │        │         │        │  检测   │
-       └─────────┘        └────┬────┘        └─────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                ▼
-        ┌──────────┐     ┌──────────┐     ┌──────────┐
-        │  更新    │     │  proot   │     │  系统    │
-        │  检查    │     │  安装/   │     │  信息    │
-        │ + 拉取   │     │  登录    │     │          │
-        └──────────┘     └──────────┘     └──────────┘
-```
-
-## 添加新语言
-
-1. 复制 `tui/lang/en.sh` 为 `tui/lang/<你的locale>.sh`
-2. 翻译所有 `MSG_*`、`OPT_*`、`MENU_*`、`CLI_*`、`LANG_*` 变量值
-3. 必要时修改 `tui/termux-tools` 中的 `detect_language()` 函数
-4. 用 `LANG=<你的locale> termux-tools` 测试
-
-## 系统要求
-
-- Termux（建议最新稳定版）
-- 网络连接（用于安装与更新）
-- 大约 5 MB 可用空间
 
 ## 许可证
 
-本项目基于 [GPL-v3](LICENSE) 许可证开源。
-
-## 作者
-
-**Xynrin** — [GitHub 主页](https://github.com/Xynrin)
-
-<div align="center">
-
-为 Termux 小白而做，欢迎 PR。
-
-</div>
+[GPL-v3](LICENSE) · 作者：**Xynrin**
