@@ -54,6 +54,7 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let res = run(&mut terminal, bootstrap, show_notes, update_mode);
+    let restart = res.as_ref().map(|r| *r).unwrap_or(false);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -61,6 +62,20 @@ fn main() -> io::Result<()> {
 
     if let Err(err) = res {
         eprintln!("error: {err}");
+        return Ok(());
+    }
+
+    // 升级成功后无感重启 —— exec 替换当前进程，旧 PID 直接消失
+    // After upgrade success, exec replaces the process; old PID/memory go away.
+    if restart {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            use std::process::Command;
+            let exe = std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("xynrin"));
+            let _err = Command::new(exe).arg("update").arg("--show-notes").exec();
+        }
     }
     Ok(())
 }
@@ -70,20 +85,16 @@ fn run<B: ratatui::backend::Backend + io::Write>(
     bootstrap: bool,
     show_notes: bool,
     update_mode: bool,
-) -> io::Result<()> {
+) -> io::Result<bool> {
     let mut app = App::new(bootstrap, show_notes, update_mode);
     while !app.should_quit {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         app.tick()?;
 
-        // 交互式动作：挂起 ratatui，把真终端交给 bash，跑完恢复
-        // Interactive action: suspend ratatui, hand the real TTY to bash, restore after.
         if let Some(args) = app.pending_interactive.take() {
             suspend(terminal)?;
             let _ = runner::run_interactive(args, app.lang);
             resume(terminal)?;
-            // 语言切换后重建 i18n（bash 端写入了 .lang_pref）
-            // After a language switch the bash side has written .lang_pref, rebuild i18n.
             let new_lang = i18n::Lang::detect();
             if new_lang != app.lang {
                 app.lang = new_lang;
@@ -91,7 +102,7 @@ fn run<B: ratatui::backend::Backend + io::Write>(
             }
         }
     }
-    Ok(())
+    Ok(app.restart_after_quit)
 }
 
 fn suspend<B: ratatui::backend::Backend + io::Write>(terminal: &mut Terminal<B>) -> io::Result<()> {

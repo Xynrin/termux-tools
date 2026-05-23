@@ -61,4 +61,6 @@ update_apply_action() {
     log_step "${MSG_APPLYING_MIGRATION:-Applying migration}"
     bash "$PROJECT_ROOT/install.sh" --upgrade || log_warn "upgrade returned non-zero"
     log_ok "${MSG_UPDATE_DONE:-Update done}"
+    # 通知 Rust 端 exec 新二进制 / Tell Rust side to exec the new binary
+    printf '::restart::\n'
 }

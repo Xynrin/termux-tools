@@ -65,6 +65,11 @@ pub fn parse_line(raw: &str) -> LogLine {
         // 内部信号：远端版本，runner 会单独处理 / internal: remote version, handled by runner
         return LogLine { level: Level::Debug, text: format!("__remote__{rest}") };
     }
+    if raw.trim() == "::restart::" || raw.starts_with("::restart::") {
+        // 内部信号：升级完成，让主循环 exec 新二进制
+        // Internal signal: upgrade succeeded, main loop should exec the new binary
+        return LogLine { level: Level::Debug, text: "__restart__".to_string() };
+    }
     let lower = raw.to_lowercase();
     let level = if lower.contains("error") || lower.contains("failed") || lower.contains("fatal") {
         Level::Err

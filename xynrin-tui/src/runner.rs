@@ -22,6 +22,22 @@ pub struct Runner {
 
 impl Runner {
     pub fn try_kill(&mut self) {
+        // 先把整个进程组干掉（pkg/curl/git 子进程都收 SIGTERM），
+        // 1.5s 后还活着再 SIGKILL —— 防止 ESC 后 CPU 持续被占
+        // Kill the whole process group first (so pkg/curl/git children
+        // get SIGTERM too), upgrade to SIGKILL after 1.5s if still alive.
+        // This stops the "Esc leaves zombies eating CPU" leak on phones.
+        #[cfg(unix)]
+        unsafe {
+            let pid = self.child.id() as i32;
+            libc::kill(-pid, libc::SIGTERM);
+            for _ in 0..15 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if libc::kill(-pid, 0) != 0 { return; }
+            }
+            libc::kill(-pid, libc::SIGKILL);
+        }
+        #[cfg(not(unix))]
         let _ = self.child.kill();
     }
 }
@@ -37,6 +53,20 @@ pub fn spawn(args: &[&str], lang: Lang) -> std::io::Result<Runner> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
+
+    // 让 bash 跑在新进程组里：Esc 杀整个组，不留 pkg/curl/git 残留子进程
+    // Put bash in its own process group so Esc kills the whole tree
+    // (no leftover pkg/curl/git children chewing CPU on the phone).
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+    }
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("piped");
