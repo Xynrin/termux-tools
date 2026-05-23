@@ -139,6 +139,11 @@ do_update() {
         echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
         return 1
     fi
+
+    # 丢弃跟踪文件的本地改动，避免 git pull 因冲突中止
+    # Discard local changes to tracked files so git pull won't abort
+    # (xynrin/install.sh 等都是仓库管理文件，本地改动通常是误入)
+    ( cd "$PROJECT_ROOT" && git checkout -- . 2>/dev/null || true )
     ( cd "$PROJECT_ROOT" && git pull --ff-only origin main )
 
     echo -e "${CYAN}${MSG_APPLYING_MIGRATION}${RESET}"
