@@ -81,12 +81,16 @@ pub struct App {
     pub should_quit: bool,
     pub bootstrap_mode: bool,
     pub show_notes_only: bool,
+    // update_mode: 启动即跑 update_check，跑完直接退出（不显示主菜单）
+    // update_mode: starts update_check immediately and exits when done (no menu)
+    pub update_mode: bool,
+    pub update_started: bool,
     // 主循环用：交互式动作请求 / Interactive action request, handled by main loop
     pub pending_interactive: Option<&'static [&'static str]>,
 }
 
 impl App {
-    pub fn new(bootstrap_mode: bool, show_notes_only: bool) -> Self {
+    pub fn new(bootstrap_mode: bool, show_notes_only: bool, update_mode: bool) -> Self {
         let lang = Lang::detect();
         let mut menu = ListState::default();
         menu.select(Some(0));
@@ -94,6 +98,8 @@ impl App {
             Screen::Notes { scroll: 0 }
         } else if bootstrap_mode {
             Screen::Bootstrap { finished: false }
+        } else if update_mode {
+            Screen::Running { action: Action::Update, finished: false, exit_ok: None }
         } else {
             Screen::Menu
         };
@@ -109,6 +115,8 @@ impl App {
             should_quit: false,
             bootstrap_mode,
             show_notes_only,
+            update_mode,
+            update_started: false,
             pending_interactive: None,
         }
     }
@@ -170,6 +178,16 @@ impl App {
         if let Screen::Bootstrap { finished: false } = self.screen {
             if self.runner.is_none() && self.log.is_empty() {
                 self.start_runner(&["--menu-bootstrap"]);
+            }
+        }
+        // update_mode 入口：直接跑 update-check，不显示菜单
+        // update_mode entry: run update-check immediately, skip the menu
+        if self.update_mode && !self.update_started {
+            if let Screen::Running { action: Action::Update, .. } = self.screen {
+                if self.runner.is_none() {
+                    self.update_started = true;
+                    self.start_runner(&["--menu-update-check"]);
+                }
             }
         }
 
@@ -249,13 +267,30 @@ impl App {
             KeyCode::Esc => {
                 if let Some(r) = self.runner.as_mut() { r.try_kill(); }
                 self.runner = None;
-                self.screen = Screen::Menu;
+                if self.update_mode {
+                    self.should_quit = true;
+                } else {
+                    self.screen = Screen::Menu;
+                }
                 self.log_scroll = None;
+            }
+            KeyCode::Char('q') => {
+                if let Screen::Running { finished: true, .. } = self.screen {
+                    if self.update_mode {
+                        self.should_quit = true;
+                    } else {
+                        self.screen = Screen::Menu;
+                    }
+                }
             }
             KeyCode::Tab => self.focus_log = !self.focus_log,
             KeyCode::Enter => {
                 if let Screen::Running { finished: true, .. } = self.screen {
-                    self.screen = Screen::Menu;
+                    if self.update_mode {
+                        self.should_quit = true;
+                    } else {
+                        self.screen = Screen::Menu;
+                    }
                 }
             }
             KeyCode::PageUp => {
@@ -302,7 +337,11 @@ impl App {
                 self.screen = Screen::Running { action: Action::Update, finished: false, exit_ok: None };
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                self.screen = Screen::Menu;
+                if self.update_mode {
+                    self.should_quit = true;
+                } else {
+                    self.screen = Screen::Menu;
+                }
             }
             _ => {}
         }

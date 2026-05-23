@@ -23,6 +23,7 @@ fn main() -> io::Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let mut bootstrap = false;
     let mut show_notes = false;
+    let mut update_mode = false;
     for (i, a) in raw.iter().enumerate() {
         match a.as_str() {
             "--bootstrap" => bootstrap = true,
@@ -30,6 +31,8 @@ fn main() -> io::Result<()> {
             "update" => {
                 if raw.get(i + 1).map(String::as_str) == Some("--show-notes") {
                     show_notes = true;
+                } else {
+                    update_mode = true;
                 }
             }
             "version" | "-v" | "--version" => {
@@ -50,7 +53,7 @@ fn main() -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run(&mut terminal, bootstrap, show_notes);
+    let res = run(&mut terminal, bootstrap, show_notes, update_mode);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -66,8 +69,9 @@ fn run<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut Terminal<B>,
     bootstrap: bool,
     show_notes: bool,
+    update_mode: bool,
 ) -> io::Result<()> {
-    let mut app = App::new(bootstrap, show_notes);
+    let mut app = App::new(bootstrap, show_notes, update_mode);
     while !app.should_quit {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         app.tick()?;
