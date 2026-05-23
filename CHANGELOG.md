@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-05-24
+
+### Changed
+- **取消首次部署的 Ubuntu 强制安装** / Drop forced Ubuntu install on first run — bootstrap 现在只装核心依赖（curl/git/wget/fzf/ncurses-utils），用户想要发行版可以随时进选项 2 自己挑。
+- **菜单从 8 项精简为 7 项** / Menu trimmed from 8 to 7 items — 删除「管理已装发行版」选项及其所有相关代码（`Action::ProotManage`、`--menu-proot-manage`、`proot_manage_menu`）。
+- **所有 UI 文本走 i18n** / All UI text goes through i18n — banner 标签（Version/Author/Repo）、运行态/确认态/notes 态的提示行都按 key 取串，切换语言后整个 UI 同步刷新。
+
+### Fixed
+- **版本号硬编码** / Version-string drift — Cargo.toml 的 `version` 之前被卡在 3.1.0，banner 显示也跟着错。release.sh 现在在打 tag 前自动同步 Cargo.toml，杜绝再次跑偏。
+- **ESC 残留进程** / ESC leaves zombies — 之前 ESC 只杀 bash，孙子进程（pkg/curl/git）继续吃 CPU。runner 现在把 bash 放进新 setsid 进程组，try_kill 用 `kill(-pid, SIGTERM)` 杀整个组，1.5s 后还活着升级 SIGKILL。
+- **主题预览裸露转义码** / Theme preview leaked raw escape codes — 'EOF' 引号 heredoc 把 `\e[31m` 当字面字符串输出，预览里全是 `[38;2;...m`。改用 `printf '\e[...m'` 真正插入 ESC 字节，配合 fzf `--ansi` 渲染。
+
+### Added
+- **升级后无感重启** / Seamless restart after upgrade — `update_apply` 完成时输出 `::restart::`，Rust 端识别后用 `exec` 替换当前进程为新二进制并自动跳到 `update --show-notes`，老 PID 直接消失。
+- **镜像损坏自检** / Mirror auto-repair — bootstrap 启动时检测 `sources.list` / `x11.list` / `root.list` 三件套，发现 v3.1.0 残留的半截配置就静默重置为官方源。
+- **窄屏自适应优化** / Better narrow-screen layout — banner 在小屏自动塌缩为单行 `xynrin vX.Y.Z by Xynrin`，菜单/日志在 60 列以下纵向堆叠。
+
 ## [3.1.2] - 2026-05-23
 
 ### Fixed

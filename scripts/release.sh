@@ -25,6 +25,31 @@ cd "$ROOT"
 VERSION="$(tr -d '[:space:]' < scripts/version)"
 TAG="v${VERSION}"
 
+# 把 Cargo.toml 的 version 同步到 scripts/version —— 避免 banner 读到老版本号
+# Sync Cargo.toml [package].version with scripts/version so the binary's
+# env!("CARGO_PKG_VERSION") matches what's in the tag.
+CARGO_TOML="$ROOT/xynrin-tui/Cargo.toml"
+if [[ -f "$CARGO_TOML" ]]; then
+    CUR_CARGO="$(awk -F'"' '/^version *=/ {print $2; exit}' "$CARGO_TOML")"
+    if [[ "$CUR_CARGO" != "$VERSION" ]]; then
+        echo "==> Bumping Cargo.toml: $CUR_CARGO -> $VERSION"
+        if [[ "$MODE" != "dry-run" ]]; then
+            sed -i.bak -E "0,/^version *=.*/s//version = \"${VERSION}\"/" "$CARGO_TOML"
+            rm -f "${CARGO_TOML}.bak"
+            ( cd "$ROOT/xynrin-tui" && cargo build --release --offline 2>/dev/null \
+                || cargo build --release 2>/dev/null \
+                || true )
+            git add "$CARGO_TOML" "$ROOT/xynrin-tui/Cargo.lock" 2>/dev/null || true
+            if ! git diff --cached --quiet 2>/dev/null; then
+                git commit -m "chore(release): sync Cargo.toml to v${VERSION}
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
+                git push origin main || true
+            fi
+        fi
+    fi
+fi
+
 echo "==> Version: $VERSION  Tag: $TAG  Mode: $MODE"
 
 # ============================================================
