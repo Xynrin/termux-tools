@@ -1,0 +1,376 @@
+#!/usr/bin/env bash
+#
+# xynrin - Termux 辅助 TUI 工具 / Termux helper TUI tool
+# License: GPL-v3
+# Author:  Xynrin
+# Repo:    https://github.com/Xynrin/termux-tools
+#
+# 启用严格模式 / Enable strict mode
+set -euo pipefail
+
+# ============================================================
+# 路径解析（跟随符号链接到真实文件）
+# Path resolution (follow symlinks to the real file)
+# ============================================================
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" &> /dev/null && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+VERSION_FILE="$PROJECT_ROOT/scripts/version"
+LANG_DIR="$SCRIPT_DIR/lang"
+INSTALL_SCRIPT="$PROJECT_ROOT/install.sh"
+ALIASES_FILE="$PROJECT_ROOT/.aliases"   # 持久化已配置的别名 / persisted alias list
+
+REPO_HTTPS="https://github.com/Xynrin/termux-tools"
+REPO_RAW="https://raw.githubusercontent.com/Xynrin/termux-tools/main"
+
+CURRENT_VERSION="$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")"
+AUTHOR="Xynrin"
+
+# ============================================================
+# 颜色 / Colors
+# ============================================================
+RED='\e[31m'
+GREEN='\e[32m'
+YELLOW='\e[33m'
+BLUE='\e[34m'
+MAGENTA='\e[35m'
+CYAN='\e[36m'
+ORANGE='\e[38;5;202m'
+PINK='\e[38;5;213m'
+BOLD='\e[1m'
+RESET='\e[0m'
+
+# ============================================================
+# 语言加载 / Language loading
+# ============================================================
+LANG_PREF_FILE="$PROJECT_ROOT/.lang_pref"
+
+detect_language() {
+    local lang_env="${LANG:-${LC_ALL:-en_US}}"
+    if [[ "$lang_env" == *zh* ]] || [[ "$lang_env" == *CN* ]] || [[ "$lang_env" == *TW* ]]; then
+        echo "zh"
+    else
+        echo "en"
+    fi
+}
+
+get_language_pref() {
+    if [[ -f "$LANG_PREF_FILE" ]]; then
+        cat "$LANG_PREF_FILE"
+    else
+        detect_language
+    fi
+}
+
+save_language_pref() { echo "$1" > "$LANG_PREF_FILE"; }
+
+load_language() {
+    local code="${1:-$(detect_language)}"
+    local file="$LANG_DIR/${code}.sh"
+    if [[ -f "$file" ]]; then
+        source "$file"
+    else
+        source "$LANG_DIR/en.sh"
+    fi
+}
+
+# ============================================================
+# Logo（仿 oh-my-logo 渐变彩色）/ Logo (oh-my-logo style gradient)
+# ============================================================
+show_logo() {
+    # 使用多种颜色逐行渲染，营造渐变效果
+    # Render line-by-line with different colors for gradient effect
+    local c1='\e[38;5;202m'  # orange
+    local c2='\e[38;5;208m'
+    local c3='\e[38;5;214m'  # gold
+    local c4='\e[38;5;220m'  # yellow
+    local c5='\e[38;5;226m'  # bright yellow
+    echo ""
+    echo -e "${BOLD}${c1} ██╗  ██╗██╗   ██╗███╗   ██╗██████╗ ██╗███╗   ██╗${RESET}"
+    echo -e "${BOLD}${c2} ╚██╗██╔╝╚██╗ ██╔╝████╗  ██║██╔══██╗██║████╗  ██║${RESET}"
+    echo -e "${BOLD}${c3}  ╚███╔╝  ╚████╔╝ ██╔██╗ ██║██████╔╝██║██╔██╗ ██║${RESET}"
+    echo -e "${BOLD}${c4}  ██╔██╗   ╚██╔╝  ██║╚██╗██║██╔══██╗██║██║╚██╗██║${RESET}"
+    echo -e "${BOLD}${c5} ██╔╝ ██╗   ██║   ██║ ╚████║██║  ██║██║██║ ╚████║${RESET}"
+    echo -e "${BOLD}${c5} ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝${RESET}"
+    echo -e "${BOLD}${ORANGE}              T E R M U X   T O O L S${RESET}"
+    echo ""
+}
+
+show_banner() {
+    show_logo
+    echo -e "  ${BOLD}${CYAN}Version${RESET}  ${GREEN}v${CURRENT_VERSION}${RESET}"
+    echo -e "  ${BOLD}${CYAN}Author${RESET}   ${GREEN}${AUTHOR}${RESET}"
+    echo -e "  ${BOLD}${CYAN}Repo${RESET}     ${BLUE}${REPO_HTTPS}${RESET}"
+    echo ""
+}
+
+# ============================================================
+# 1. 更新 xynrin / Self-update
+# ============================================================
+do_update() {
+    echo -e "${CYAN}${MSG_UPDATING}${RESET}"
+
+    local remote
+    remote="$(curl -sL "${REPO_RAW}/scripts/version" 2>/dev/null | tr -d '[:space:]')"
+    if [[ -z "$remote" ]]; then
+        echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
+        return 1
+    fi
+
+    echo -e "${MSG_CURRENT_VERSION}: ${GREEN}${CURRENT_VERSION}${RESET}"
+    echo -e "${MSG_LATEST_VERSION}:  ${GREEN}${remote}${RESET}"
+
+    if [[ "$CURRENT_VERSION" == "$remote" ]]; then
+        echo -e "${GREEN}${MSG_ALREADY_LATEST}${RESET}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}${MSG_UPDATE_AVAILABLE}${RESET} (${CURRENT_VERSION} -> ${remote})"
+
+    if ! command -v git &> /dev/null || [[ ! -d "$PROJECT_ROOT/.git" ]]; then
+        echo -e "${RED}${MSG_UPDATE_FAILED}${RESET}"
+        return 1
+    fi
+
+    # 拉取最新代码 / Pull latest code
+    ( cd "$PROJECT_ROOT" && git pull --ff-only origin main )
+
+    # 重新执行 install.sh 应用迁移（如重命名为 xynrin）
+    # Re-run install.sh to apply migrations (e.g. rename to xynrin)
+    echo -e "${CYAN}${MSG_APPLYING_MIGRATION}${RESET}"
+    bash "$INSTALL_SCRIPT" --upgrade
+    echo -e "${GREEN}${MSG_UPDATE_DONE}${RESET}"
+}
+
+# ============================================================
+# 2. 安装 proot 发行版 / Install proot distro
+# ============================================================
+proot_install() {
+    if ! command -v proot-distro &> /dev/null; then
+        echo -e "${RED}proot-distro not found${RESET}"
+        return 1
+    fi
+
+    echo -e "${CYAN}${MSG_PROOT_DISTRO_NAME}${RESET}"
+    echo -e "${YELLOW}${MSG_PROOT_DISTRO_EXAMPLE}${RESET}"
+    echo -n "> "
+    read -r distro
+
+    if [[ -z "$distro" ]]; then
+        echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}"
+        return 1
+    fi
+
+    echo -e "${CYAN}${MSG_PROOT_INSTALLING} ${distro}...${RESET}"
+    if proot-distro install "$distro"; then
+        setup_distro_alias "$distro"
+        echo -e "${GREEN}${MSG_PROOT_INSTALL_DONE}${RESET}"
+        echo -e "${CYAN}${MSG_ALIAS_CONFIGURED}: ${BOLD}${distro}${RESET}"
+        echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
+    else
+        echo -e "${RED}${MSG_PROOT_INSTALL_FAILED}${RESET}"
+    fi
+}
+
+# 为发行版设置别名 / Set up an alias for a distro
+setup_distro_alias() {
+    local distro="$1"
+    local alias_line="alias ${distro}='proot-distro login ${distro}'"
+    local rc="$HOME/.bashrc"
+
+    # 写入 .bashrc（如果还没有）/ Add to .bashrc if missing
+    if ! grep -qF "$alias_line" "$rc" 2>/dev/null; then
+        echo "$alias_line" >> "$rc"
+    fi
+
+    # 记录到 .aliases 索引文件 / Record in .aliases index
+    if ! grep -qx "$distro" "$ALIASES_FILE" 2>/dev/null; then
+        echo "$distro" >> "$ALIASES_FILE"
+    fi
+}
+
+# ============================================================
+# 3. 列出真实可用的别名 / List actual usable aliases
+# ============================================================
+list_aliases() {
+    echo -e "${BOLD}${CYAN}${MSG_ALIASES_TITLE}${RESET}"
+    echo ""
+
+    if ! command -v proot-distro &> /dev/null; then
+        echo -e "${YELLOW}${MSG_PROOT_NOT_INSTALLED}${RESET}"
+        return 0
+    fi
+
+    # 取已安装发行版与 .bashrc 中的别名做交集，确保展示的都真实可用
+    # Intersect installed distros with aliases defined in .bashrc to
+    # ensure every shown entry is actually usable
+    local installed
+    installed="$(proot-distro list --installed 2>/dev/null | grep -E '^[a-z]' | awk '{print $1}')"
+
+    if [[ -z "$installed" ]]; then
+        echo -e "  ${YELLOW}${MSG_PROOT_NOT_INSTALLED}${RESET}"
+        return 0
+    fi
+
+    local rc="$HOME/.bashrc"
+    local found=0
+    while IFS= read -r distro; do
+        local alias_line="alias ${distro}='proot-distro login ${distro}'"
+        if grep -qF "$alias_line" "$rc" 2>/dev/null; then
+            echo -e "  ${GREEN}${distro}${RESET}  →  proot-distro login ${distro}"
+            found=1
+        fi
+    done <<< "$installed"
+
+    if [[ $found -eq 0 ]]; then
+        echo -e "  ${YELLOW}${MSG_NO_ALIAS}${RESET}"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${YELLOW}${MSG_ALIAS_RESTART_HINT}${RESET}"
+}
+
+# ============================================================
+# 4. 系统信息 / System info
+# ============================================================
+show_system_info() {
+    echo -e "${BOLD}${CYAN}${MSG_SYSTEM_INFO}${RESET}"
+    echo -e "  ${GREEN}${MSG_OS}:${RESET}        $(uname -o 2>/dev/null || uname -s)"
+    echo -e "  ${GREEN}${MSG_ARCH}:${RESET}        $(uname -m)"
+    echo -e "  ${GREEN}${MSG_KERNEL}:${RESET}      $(uname -r)"
+    echo -e "  ${GREEN}${MSG_SHELL}:${RESET}       $SHELL"
+    if [[ -n "${TERMUX_VERSION:-}" ]]; then
+        echo -e "  ${GREEN}${MSG_TERMUX_VERSION}:${RESET} ${TERMUX_VERSION}"
+    fi
+    if command -v fastfetch &> /dev/null; then
+        echo ""
+        fastfetch
+    fi
+}
+
+# ============================================================
+# 5. 添加或设置镜像源 / Configure mirror sources
+# ============================================================
+configure_mirror() {
+    echo -e "${BOLD}${CYAN}${MSG_MIRROR_TITLE}${RESET}"
+    echo ""
+    echo -e "  ${GREEN}1)${RESET} ${MSG_MIRROR_INTERACTIVE} (termux-change-repo)"
+    echo -e "  ${GREEN}2)${RESET} ${MSG_MIRROR_TSINGHUA}"
+    echo -e "  ${GREEN}3)${RESET} ${MSG_MIRROR_USTC}"
+    echo -e "  ${GREEN}4)${RESET} ${MSG_MIRROR_OFFICIAL}"
+    echo -e "  ${GREEN}0)${RESET} ${OPT_BACK}"
+    echo ""
+    echo -n "> "
+    read -r choice
+
+    case "$choice" in
+        1)
+            if command -v termux-change-repo &> /dev/null; then
+                termux-change-repo
+            else
+                echo -e "${RED}termux-change-repo not found${RESET}"
+                echo -e "${YELLOW}pkg install termux-tools${RESET}"
+            fi
+            ;;
+        2) apply_mirror "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main" "Tsinghua" ;;
+        3) apply_mirror "https://mirrors.ustc.edu.cn/termux/apt/termux-main" "USTC" ;;
+        4) apply_mirror "https://packages.termux.dev/apt/termux-main" "Official" ;;
+        0) return 0 ;;
+        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
+    esac
+}
+
+apply_mirror() {
+    local url="$1"
+    local name="$2"
+    local sources="$PREFIX/etc/apt/sources.list"
+
+    echo -e "${CYAN}${MSG_MIRROR_APPLYING} ${name}...${RESET}"
+
+    # 备份原文件 / Backup original
+    cp "$sources" "${sources}.bak.$(date +%s)"
+
+    # 写入新源 / Write new source
+    echo "deb $url stable main" > "$sources"
+
+    echo -e "${GREEN}${MSG_MIRROR_APPLIED}: ${name}${RESET}"
+    echo -e "${CYAN}${MSG_MIRROR_UPDATING}${RESET}"
+    pkg update -y || echo -e "${YELLOW}${MSG_MIRROR_UPDATE_WARN}${RESET}"
+}
+
+# ============================================================
+# TUI 主菜单 / TUI main menu
+# ============================================================
+show_menu() {
+    while true; do
+        echo ""
+        echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
+        echo -e "  ${GREEN}1)${RESET} ${OPT_UPDATE}"
+        echo -e "  ${GREEN}2)${RESET} ${OPT_PROOT_INSTALL}"
+        echo -e "  ${GREEN}3)${RESET} ${OPT_LIST_ALIASES}"
+        echo -e "  ${GREEN}4)${RESET} ${OPT_SYSTEM_INFO}"
+        echo -e "  ${GREEN}5)${RESET} ${OPT_MIRROR}"
+        echo -e "  ${GREEN}6)${RESET} ${OPT_EXIT}"
+        echo ""
+        echo -n "> "
+        read -r choice
+
+        case "$choice" in
+            1) do_update ;;
+            2) proot_install ;;
+            3) list_aliases ;;
+            4) show_system_info ;;
+            5) configure_mirror ;;
+            6|0|q|Q) echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
+        esac
+
+        echo ""
+        echo -n "${MSG_PRESS_ENTER}"
+        read -r _
+    done
+}
+
+# ============================================================
+# CLI / CLI commands
+# ============================================================
+show_help() {
+    show_banner
+    echo -e "${CLI_HELP_USAGE}"
+    echo ""
+    echo -e "${CLI_HELP_CMDS}"
+    echo -e "${CLI_HELP_MENU}"
+    echo -e "${CLI_HELP_HELP}"
+    echo -e "${CLI_HELP_VERSION}"
+    echo -e "${CLI_HELP_UPDATE}"
+}
+
+show_version() { echo "xynrin v${CURRENT_VERSION}"; }
+
+# ============================================================
+# 入口 / Entry point
+# ============================================================
+main() {
+    load_language "$(get_language_pref)"
+
+    case "${1:-menu}" in
+        help|-h|--help)        show_help ;;
+        version|-v|--version)  show_version ;;
+        update|-u|--update)    do_update ;;
+        menu|"")
+            show_banner
+            echo -e "${BOLD}${MSG_WELCOME}${RESET}"
+            show_menu
+            ;;
+        *)
+            echo -e "${RED}Unknown command: $1${RESET}"
+            echo ""
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
