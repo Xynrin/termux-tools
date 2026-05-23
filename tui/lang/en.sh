@@ -58,6 +58,12 @@ MSG_MIRROR_APPLYING="Applying mirror"
 MSG_MIRROR_APPLIED="Mirror applied"
 MSG_MIRROR_UPDATING="Updating package index..."
 MSG_MIRROR_UPDATE_WARN="Index update failed; mirror may be unreachable."
+MSG_MIRROR_BACKUP_WARN="Could not back up sources.list (continuing)."
+MSG_MIRROR_WRITE_FAIL="Failed to write sources.list"
+
+# fzf
+MSG_FZF_INSTALLING="fzf not found, installing..."
+MSG_FZF_FALLBACK="fzf unavailable, using fallback prompt"
 
 # CLI / CLI 命令
 CLI_HELP_USAGE="Usage: xynrin [command]"
