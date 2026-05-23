@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.4] - 2026-05-24
+
+### Added
+- **启动静默检查更新** / Silent update check on launch — 进主菜单前 3 秒超时 git ls-remote 比对版本，发现新版本直接进 update 模式（带 changelog + 确认条），没有就正常进 TUI，全程静默。
+- **bootstrap 自带 tree / cat / fastfetch 美化** / Pretty defaults out of the box — 装 lsd（带图标的 ls/tree 替代）+ bat（带语法高亮的 cat 替代）+ fastfetch；写 alias 到 bash/zsh/fish rc：`ls/ll/la/tree → lsd`、`cat → bat`、`neofetch → fastfetch`；交互式 shell 启动时自动跑一次 fastfetch。
+
+### Fixed
+- **下载期间快捷键失灵** / Keys frozen during download — `Screen::Bootstrap` 之前只在 `finished:true` 后处理按键，pkg/curl 跑的时候 Esc/q/Tab 全部哑火。现在运行中也响应：Esc/q 杀整个进程组并回菜单，Tab 切焦点，PgUp/PgDn 滚动日志。
+- **apt 进度条挤爆日志缓冲** / apt progress spam — 之前 `\r` 进度条每次刷新都进 4096 行 ring buffer，几秒就把真正的步骤日志挤走。runner 现在按 `\r` 切片只保留每行最后一段，进度条折叠成单行流式输出。
+- **log_panel 标题硬编码中文** / Log title hardcoded zh — 标题改走 `running.title` + `running.scrolling` i18n key，跟着语言切换刷新。
+
 ## [3.1.3] - 2026-05-24
 
 ### Changed

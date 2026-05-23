@@ -47,6 +47,15 @@ fn main() -> io::Result<()> {
         }
     }
 
+    // 进入主菜单前静默检查新版本：有则进 update_mode，无则正常进 TUI
+    // Silent update check before menu mode: if remote > local, switch into
+    // update_mode automatically; otherwise fall through to the menu.
+    if !bootstrap && !show_notes && !update_mode {
+        if silent_update_available() {
+            update_mode = true;
+        }
+    }
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -103,6 +112,70 @@ fn run<B: ratatui::backend::Backend + io::Write>(
         }
     }
     Ok(app.restart_after_quit)
+}
+
+// 启动前静默对比 git ls-remote tag 与本地版本：完全静默，3 秒超时，
+// 失败/无网络一律视作"无更新"，不打扰用户
+// Pre-launch silent compare: git ls-remote vs local version. 3-second
+// timeout, any failure / no-network counts as "no update" — never blocks.
+fn silent_update_available() -> bool {
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+    let local = env!("CARGO_PKG_VERSION").trim().to_string();
+    let mut child = match Command::new("timeout")
+        .arg("3")
+        .arg("git")
+        .arg("ls-remote")
+        .arg("--tags")
+        .arg("--refs")
+        .arg("https://github.com/Xynrin/termux-tools")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let _ = child.wait_timeout(Duration::from_secs(3));
+    let out = match child.wait_with_output() {
+        Ok(o) if o.status.success() => o.stdout,
+        _ => return false,
+    };
+    let text = String::from_utf8_lossy(&out);
+    let mut latest: Option<(u32, u32, u32)> = None;
+    for line in text.lines() {
+        if let Some(tag) = line.split("refs/tags/v").nth(1) {
+            if let Some(v) = parse_semver(tag.trim()) {
+                if latest.map(|cur| v > cur).unwrap_or(true) {
+                    latest = Some(v);
+                }
+            }
+        }
+    }
+    let local_v = match parse_semver(&local) { Some(v) => v, None => return false };
+    matches!(latest, Some(v) if v > local_v)
+}
+
+fn parse_semver(s: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = s.split('.');
+    let a = parts.next()?.parse().ok()?;
+    let b = parts.next()?.parse().ok()?;
+    let c = parts.next()?.split(|ch: char| !ch.is_ascii_digit()).next()?.parse().ok()?;
+    Some((a, b, c))
+}
+
+trait WaitTimeout { fn wait_timeout(&mut self, _: std::time::Duration) -> std::io::Result<()>; }
+impl WaitTimeout for std::process::Child {
+    fn wait_timeout(&mut self, d: std::time::Duration) -> std::io::Result<()> {
+        let start = std::time::Instant::now();
+        loop {
+            match self.try_wait()? {
+                Some(_) => return Ok(()),
+                None if start.elapsed() >= d => { let _ = self.kill(); return Ok(()); }
+                None => std::thread::sleep(std::time::Duration::from_millis(100)),
+            }
+        }
+    }
 }
 
 fn suspend<B: ratatui::backend::Backend + io::Write>(terminal: &mut Terminal<B>) -> io::Result<()> {

@@ -359,10 +359,38 @@ impl App {
     }
 
     fn on_key_bootstrap(&mut self, code: KeyCode) {
+        // 完成后任意键回菜单 / After finished, any key returns to menu
         if let Screen::Bootstrap { finished: true } = self.screen {
             if matches!(code, KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q')) {
                 self.screen = Screen::Menu;
             }
+            return;
+        }
+        // 进行中：Esc / q 取消并杀进程，避免下载期间按键失灵
+        // In-progress: Esc/q cancels, kills the runner so the user can bail
+        match code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                if let Some(r) = self.runner.as_mut() { r.try_kill(); }
+                self.runner = None;
+                self.screen = Screen::Menu;
+                self.log_scroll = None;
+            }
+            KeyCode::Tab => self.focus_log = !self.focus_log,
+            KeyCode::PageUp => {
+                let cur = self.log_scroll.unwrap_or(self.log.len().saturating_sub(1));
+                self.log_scroll = Some(cur.saturating_sub(10));
+            }
+            KeyCode::PageDown => {
+                let cur = self.log_scroll.unwrap_or(self.log.len().saturating_sub(1));
+                let new = (cur + 10).min(self.log.len().saturating_sub(1));
+                if new == self.log.len().saturating_sub(1) {
+                    self.log_scroll = None;
+                } else {
+                    self.log_scroll = Some(new);
+                }
+            }
+            KeyCode::End => self.log_scroll = None,
+            _ => {}
         }
     }
 }

@@ -113,8 +113,13 @@ fn pump<R: std::io::Read + Send + 'static>(reader: R, tx: Sender<RunMsg>, is_std
     thread::spawn(move || {
         let buf = BufReader::new(reader);
         for line in buf.lines().map_while(Result::ok) {
-            let mut ev = parse_line(&line);
-            if is_stderr && !line.starts_with("::") {
+            // 处理 apt/pkg 的回车进度条：取最后一段，避免 4096 行缓冲被进度条挤爆
+            // Handle apt/pkg \r progress bars: keep only the last segment so
+            // the 4096-line ring buffer isn't flooded by carriage-return spam.
+            let cleaned = line.rsplit('\r').next().unwrap_or(&line).to_string();
+            if cleaned.is_empty() { continue; }
+            let mut ev = parse_line(&cleaned);
+            if is_stderr && !cleaned.starts_with("::") {
                 ev.level = Level::Warn;
             }
             if tx.send(RunMsg::Line(ev)).is_err() { break; }
