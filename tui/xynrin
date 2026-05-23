@@ -724,6 +724,14 @@ main() {
         help|-h|--help)        show_help ;;
         version|-v|--version)  show_version ;;
         update|-u|--update)    do_update ;;
+        # Rust TUI 调用的子命令分发 / Sub-commands invoked from the Rust TUI
+        --menu-update)         do_update ;;
+        --menu-proot-install)  ensure_fzf || true; proot_install ;;
+        --menu-list-aliases)   list_aliases ;;
+        --menu-system-info)    show_system_info ;;
+        --menu-mirror)         ensure_fzf || true; configure_mirror ;;
+        --menu-language)       ensure_fzf || true; change_language ;;
+        --menu-beautify)       ensure_fzf || true; beautify_menu ;;
         menu|"")
             ensure_fzf || echo -e "${YELLOW}${MSG_FZF_FALLBACK:-fzf unavailable, using fallback prompt}${RESET}"
             show_banner
