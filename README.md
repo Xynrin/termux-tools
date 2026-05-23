@@ -1,6 +1,6 @@
 <div align="center">
 
-# xynrin
+# ![logo](./images/logo.jpg)
 
 **A TUI helper tool for Termux beginners**
 
@@ -24,6 +24,10 @@ curl -sL https://raw.githubusercontent.com/Xynrin/termux-tools/main/bootstrap.sh
 
 The bootstrap installs the minimum (curl + git), clones the repo, and hands off to the Rust TUI which streams every remaining setup step (pkg upgrade, fzf/proot-distro, default Ubuntu container, aliases) inside a live log panel.
 
+## Look it
+
+![test](./images/test.jpg)
+
 ## Manual install
 
 ```bash
@@ -46,18 +50,17 @@ xynrin-bash                     # always the bash fallback engine
 
 ## TUI menu
 
-| # | Action |
-|:-:|---|
-| 1 | Update xynrin |
-| 2 | Install proot distro |
-| 3 | Manage installed distros (login / **remove** with alias cleanup) |
-| 4 | System info (self-rendered, no fastfetch dep) |
-| 5 | Configure mirror sources |
-| 6 | Change language |
-| 7 | Beautify Termux (theme + bash/zsh/fish prompt) |
-| 8 | Exit |
+|  #  | Action                                         |
+| :-: | ---------------------------------------------- |
+|  1  | Update xynrin                                  |
+|  2  | Install proot distro                           |
+|  3  | System info (self-rendered, no fastfetch dep)  |
+|  4  | Configure mirror sources                       |
+|  5  | Change language                                |
+|  6  | Beautify Termux (theme + bash/zsh/fish prompt) |
+|  7  | Exit                                           |
 
-Keys: `↑/↓` or `j/k` to select · `1..8` jump · `Enter` run · `Tab` focus log/menu · `PgUp/PgDn` scroll log · `Esc` cancel running action · `q` quit.
+Keys: `↑/↓` or `j/k` to select · `1..7` jump · `Enter` run · `Tab` focus log/menu · `PgUp/PgDn` scroll log · `Esc` cancel running action · `q` quit.
 
 ## Architecture
 

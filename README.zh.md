@@ -1,6 +1,6 @@
 <div align="center">
 
-# xynrin
+# ![logo](./images/logo.jpg)
 
 **为 Termux 小白打造的 TUI 辅助工具**
 
@@ -24,6 +24,10 @@ curl -sL https://raw.githubusercontent.com/Xynrin/termux-tools/main/bootstrap.sh
 
 bootstrap 只装最小依赖（curl + git）和克隆仓库，剩下的部署步骤（pkg upgrade、fzf/proot-distro、默认 Ubuntu、别名）全部交给 Rust TUI 在实时日志面板里完成。
 
+## 预览
+
+![test](./images/test.jpg)
+
 ## 手动安装
 
 ```bash
@@ -46,18 +50,17 @@ xynrin-bash                     # 始终走 bash 兜底引擎
 
 ## TUI 菜单
 
-| # | 功能 |
-|:-:|---|
-| 1 | 更新 xynrin |
-| 2 | 安装 proot 发行版 |
-| 3 | 管理已装发行版（登录 / **删除**，自动清理别名） |
-| 4 | 系统信息（自写，不依赖 fastfetch） |
-| 5 | 切换镜像源 |
-| 6 | 切换语言 |
-| 7 | 美化 Termux（主题 + bash/zsh/fish 提示符） |
-| 8 | 退出 |
+|  #  | 功能                                       |
+| :-: | ------------------------------------------ |
+|  1  | 更新 xynrin                                |
+|  2  | 安装 proot 发行版                          |
+|  3  | 系统信息（自写，不依赖 fastfetch）         |
+|  4  | 切换镜像源                                 |
+|  5  | 切换语言                                   |
+|  6  | 美化 Termux（主题 + bash/zsh/fish 提示符） |
+|  7  | 退出                                       |
 
-按键：`↑/↓` 或 `j/k` 选择 · `1..8` 直跳 · `Enter` 执行 · `Tab` 切换菜单/日志焦点 · `PgUp/PgDn` 滚日志 · `Esc` 取消运行 · `q` 退出。
+按键：`↑/↓` 或 `j/k` 选择 · `1..7` 直跳 · `Enter` 执行 · `Tab` 切换菜单/日志焦点 · `PgUp/PgDn` 滚日志 · `Esc` 取消运行 · `q` 退出。
 
 ## 架构
 

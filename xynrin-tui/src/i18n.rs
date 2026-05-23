@@ -47,16 +47,16 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("menu.title", "功能菜单");
             m.insert("menu.update", "更新 xynrin");
             m.insert("menu.proot_install", "安装 proot 发行版");
-            m.insert("menu.proot_manage", "管理已装发行版（登录/删除）");
             m.insert("menu.system_info", "系统信息");
             m.insert("menu.mirror", "切换镜像源");
             m.insert("menu.language", "切换语言");
             m.insert("menu.beautify", "美化 Termux");
             m.insert("menu.exit", "退出");
-            m.insert("hint.menu", "↑/↓ 选择 · Enter 执行 · Tab 切换焦点 · q 退出");
-            m.insert("hint.running", "Esc 取消 · PgUp/PgDn 滚动 · Tab 切回菜单");
-            m.insert("hint.confirm", "Y 确认 · N 取消");
+            m.insert("hint.menu", "↑/↓ 选择 · Enter 执行 · Tab 切焦点 · q 退出");
+            m.insert("hint.running", "Esc 取消 · PgUp/PgDn 滚动 · Enter 返回");
+            m.insert("hint.confirm", "Y 确认升级 · N 取消");
             m.insert("hint.notes", "↑/↓ 滚动 · Enter 返回 · q 退出");
+            m.insert("hint.bootstrap", "Esc 跳过当前步骤 · Enter 完成后进入主菜单");
             m.insert("running.title", "实时日志");
             m.insert("running.empty", "选择左侧菜单项后按 Enter 执行");
             m.insert("running.done", "操作完成");
@@ -69,23 +69,28 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("update.available", "发现新版本");
             m.insert("update.confirm", "现在升级？(Y/N)");
             m.insert("update.show_notes_after", "升级完成后会自动显示新版本日志");
+            m.insert("update.restarting", "升级完成，正在重启 xynrin...");
             m.insert("bootstrap.title", "首次部署");
             m.insert("welcome", "欢迎使用 xynrin");
+            m.insert("banner.author", "作者");
+            m.insert("banner.repo", "仓库");
+            m.insert("banner.version", "版本");
+            m.insert("mirror.repair", "检测到镜像配置受损，已重置为官方源");
         }
         Lang::En => {
             m.insert("menu.title", "Main Menu");
             m.insert("menu.update", "Update xynrin");
             m.insert("menu.proot_install", "Install proot distro");
-            m.insert("menu.proot_manage", "Manage installed distros (login/remove)");
             m.insert("menu.system_info", "System info");
             m.insert("menu.mirror", "Configure mirrors");
             m.insert("menu.language", "Change language");
             m.insert("menu.beautify", "Beautify Termux");
             m.insert("menu.exit", "Exit");
             m.insert("hint.menu", "↑/↓ select · Enter run · Tab focus · q quit");
-            m.insert("hint.running", "Esc cancel · PgUp/PgDn scroll · Tab menu");
-            m.insert("hint.confirm", "Y confirm · N cancel");
+            m.insert("hint.running", "Esc cancel · PgUp/PgDn scroll · Enter back");
+            m.insert("hint.confirm", "Y upgrade · N cancel");
             m.insert("hint.notes", "↑/↓ scroll · Enter back · q quit");
+            m.insert("hint.bootstrap", "Esc skip step · Enter back to menu when done");
             m.insert("running.title", "Live log");
             m.insert("running.empty", "Pick a menu item and press Enter");
             m.insert("running.done", "Done");
@@ -98,17 +103,21 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("update.available", "Update available");
             m.insert("update.confirm", "Upgrade now? (Y/N)");
             m.insert("update.show_notes_after", "Release notes will be shown after upgrade");
+            m.insert("update.restarting", "Upgrade done, restarting xynrin...");
             m.insert("bootstrap.title", "First-time setup");
             m.insert("welcome", "Welcome to xynrin");
+            m.insert("banner.author", "Author");
+            m.insert("banner.repo", "Repo");
+            m.insert("banner.version", "Version");
+            m.insert("mirror.repair", "Detected broken mirror config, reset to official");
         }
     }
     m
 }
 
-pub const MENU_ITEMS: [&str; 8] = [
+pub const MENU_ITEMS: [&str; 7] = [
     "menu.update",
     "menu.proot_install",
-    "menu.proot_manage",
     "menu.system_info",
     "menu.mirror",
     "menu.language",

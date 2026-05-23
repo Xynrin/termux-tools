@@ -16,7 +16,6 @@ use crate::runner::{self, RunMsg, Runner};
 pub enum Action {
     Update,
     ProotInstall,
-    ProotManage,
     SystemInfo,
     Mirror,
     Language,
@@ -28,11 +27,10 @@ impl Action {
         Some(match i {
             0 => Action::Update,
             1 => Action::ProotInstall,
-            2 => Action::ProotManage,
-            3 => Action::SystemInfo,
-            4 => Action::Mirror,
-            5 => Action::Language,
-            6 => Action::Beautify,
+            2 => Action::SystemInfo,
+            3 => Action::Mirror,
+            4 => Action::Language,
+            5 => Action::Beautify,
             _ => return None,
         })
     }
@@ -40,7 +38,6 @@ impl Action {
         match self {
             Action::Update        => &["--menu-update-apply"],
             Action::ProotInstall  => &["--menu-proot-install"],
-            Action::ProotManage   => &["--menu-proot-manage"],
             Action::SystemInfo    => &["--menu-system-info"],
             Action::Mirror        => &["--menu-mirror"],
             Action::Language      => &["--menu-language"],
@@ -53,7 +50,7 @@ impl Action {
     pub fn is_interactive(self) -> bool {
         matches!(
             self,
-            Action::ProotInstall | Action::ProotManage | Action::Mirror
+            Action::ProotInstall | Action::Mirror
                 | Action::Language | Action::Beautify
         )
     }
@@ -85,6 +82,8 @@ pub struct App {
     // update_mode: starts update_check immediately and exits when done (no menu)
     pub update_mode: bool,
     pub update_started: bool,
+    // 升级完成需要 exec 新二进制 / Upgrade finished, exec new binary on exit
+    pub restart_after_quit: bool,
     // 主循环用：交互式动作请求 / Interactive action request, handled by main loop
     pub pending_interactive: Option<&'static [&'static str]>,
 }
@@ -117,6 +116,7 @@ impl App {
             show_notes_only,
             update_mode,
             update_started: false,
+            restart_after_quit: false,
             pending_interactive: None,
         }
     }
@@ -141,12 +141,15 @@ impl App {
         let mut done = false;
         let mut pending: Vec<crate::log_event::LogLine> = Vec::new();
         let mut switch_to_confirm: Option<String> = None;
+        let mut restart_signal = false;
         if let Some(r) = self.runner.as_ref() {
             while let Ok(msg) = r.rx.try_recv() {
                 match msg {
                     RunMsg::Line(l) => {
                         if l.text.starts_with("__remote__") {
                             switch_to_confirm = Some(l.text.trim_start_matches("__remote__").trim().to_string());
+                        } else if l.text == "__restart__" {
+                            restart_signal = true;
                         } else {
                             pending.push(l);
                         }
@@ -159,8 +162,16 @@ impl App {
         if let Some(v) = switch_to_confirm {
             self.screen = Screen::UpdateConfirm { remote_version: v };
         }
+        if restart_signal {
+            self.restart_after_quit = true;
+        }
         if done {
             self.runner = None;
+            // 升级成功 → 自杀重启 / Upgrade succeeded → kill self and exec new binary
+            if self.restart_after_quit {
+                self.should_quit = true;
+                return;
+            }
             match &mut self.screen {
                 Screen::Running { finished, exit_ok, .. } => {
                     *finished = true;
@@ -233,13 +244,13 @@ impl App {
         match code {
             KeyCode::Down | KeyCode::Char('j') => self.menu_next(),
             KeyCode::Up   | KeyCode::Char('k') => self.menu_prev(),
-            KeyCode::Char(c @ '1'..='8') => {
+            KeyCode::Char(c @ '1'..='7') => {
                 let idx = (c as u8 - b'1') as usize;
                 self.menu.select(Some(idx));
             }
             KeyCode::Enter => {
                 let idx = self.menu.selected().unwrap_or(0);
-                if idx == 7 { self.should_quit = true; return; }
+                if idx == 6 { self.should_quit = true; return; }
                 if let Some(action) = Action::from_index(idx) {
                     if action == Action::Update {
                         self.start_runner(&["--menu-update-check"]);

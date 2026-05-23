@@ -103,18 +103,17 @@ fallback_menu() {
         local options=(
             "1) ${OPT_UPDATE}"
             "2) ${OPT_PROOT_INSTALL}"
-            "3) ${OPT_LIST_ALIASES}"
-            "4) ${OPT_SYSTEM_INFO}"
-            "5) ${OPT_MIRROR}"
-            "6) ${OPT_LANGUAGE}"
-            "7) ${OPT_BEAUTIFY}"
-            "8) ${OPT_EXIT}"
+            "3) ${OPT_SYSTEM_INFO}"
+            "4) ${OPT_MIRROR}"
+            "5) ${OPT_LANGUAGE}"
+            "6) ${OPT_BEAUTIFY}"
+            "7) ${OPT_EXIT}"
         )
         echo ""
         local picked
         if command -v fzf &> /dev/null; then
             picked="$(printf '%s\n' "${options[@]}" | fzf --height=40% --reverse --no-info --border=rounded \
-                --prompt="${MENU_TITLE} > ")" || picked="8"
+                --prompt="${MENU_TITLE} > ")" || picked="7"
         else
             echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
             printf '  %s\n' "${options[@]}"
@@ -125,12 +124,11 @@ fallback_menu() {
         case "$picked" in
             1*) load_module update;   update_check_action; update_apply_action ;;
             2*) load_module proot;    proot_install_action ;;
-            3*) load_module proot;    proot_manage_menu ;;
-            4*) load_module sysinfo;  sysinfo_action ;;
-            5*) load_module mirror;   mirror_action ;;
-            6*) load_module language; language_action ;;
-            7*) load_module beautify; beautify_action ;;
-            8*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            3*) load_module sysinfo;  sysinfo_action ;;
+            4*) load_module mirror;   mirror_action ;;
+            5*) load_module language; language_action ;;
+            6*) load_module beautify; beautify_action ;;
+            7*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
             *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
         esac
         echo ""
@@ -160,9 +158,6 @@ main() {
         --menu-update-check)   load_module update;   update_check_action ;;
         --menu-update-apply)   load_module update;   update_apply_action ;;
         --menu-proot-install)  ensure_fzf; load_module proot;    proot_install_action ;;
-        --menu-proot-manage)   ensure_fzf; load_module proot;    proot_manage_menu ;;
-        --menu-proot-list)     load_module proot;    proot_list_action ;;
-        --menu-list-aliases)   load_module proot;    proot_list_action ;;        # v3.0 alias
         --menu-system-info)    load_module sysinfo;  sysinfo_action ;;
         --menu-mirror)         ensure_fzf; load_module mirror;   mirror_action ;;
         --menu-language)       ensure_fzf; load_module language; language_action ;;
