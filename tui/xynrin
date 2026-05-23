@@ -353,23 +353,57 @@ apply_mirror() {
 }
 
 # ============================================================
+# 6. 切换语言 / Change language
+# ============================================================
+change_language() {
+    local options=(
+        "1) 中文 (zh)"
+        "2) English (en)"
+        "0) ${OPT_BACK}"
+    )
+
+    local picked
+    if command -v fzf &> /dev/null; then
+        picked="$(fzf_pick "${LANG_TITLE}" "${options[@]}")" || return 0
+    else
+        echo -e "${BOLD}${LANG_TITLE}${RESET}"
+        printf '  %s\n' "${options[@]}"
+        echo -n "> "
+        read -r raw
+        picked="${raw}) "
+    fi
+
+    case "$picked" in
+        1*) save_language_pref "zh"; load_language "zh"
+            echo -e "${GREEN}${MSG_LANG_SWITCHED}${RESET}" ;;
+        2*) save_language_pref "en"; load_language "en"
+            echo -e "${GREEN}${MSG_LANG_SWITCHED}${RESET}" ;;
+        0*|"") return 0 ;;
+        *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
+    esac
+}
+
+# ============================================================
 # 主菜单 / Main menu (fzf-driven)
 # ============================================================
 show_menu() {
-    local options=(
-        "1) ${OPT_UPDATE}"
-        "2) ${OPT_PROOT_INSTALL}"
-        "3) ${OPT_LIST_ALIASES}"
-        "4) ${OPT_SYSTEM_INFO}"
-        "5) ${OPT_MIRROR}"
-        "6) ${OPT_EXIT}"
-    )
-
     while true; do
+        # 每轮重新构造，使切换语言后菜单文案立即刷新
+        # Rebuild each loop so menu text refreshes after language switch
+        local options=(
+            "1) ${OPT_UPDATE}"
+            "2) ${OPT_PROOT_INSTALL}"
+            "3) ${OPT_LIST_ALIASES}"
+            "4) ${OPT_SYSTEM_INFO}"
+            "5) ${OPT_MIRROR}"
+            "6) ${OPT_LANGUAGE}"
+            "7) ${OPT_EXIT}"
+        )
+
         echo ""
         local picked
         if command -v fzf &> /dev/null; then
-            picked="$(fzf_pick "${MENU_TITLE}" "${options[@]}")" || picked="6"
+            picked="$(fzf_pick "${MENU_TITLE}" "${options[@]}")" || picked="7"
         else
             echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
             printf '  %s\n' "${options[@]}"
@@ -384,7 +418,8 @@ show_menu() {
             3*) list_aliases ;;
             4*) show_system_info ;;
             5*) configure_mirror ;;
-            6*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            6*) change_language ;;
+            7*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
             *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
         esac
 
