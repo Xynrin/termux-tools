@@ -149,33 +149,88 @@ beautify_setup_zsh() {
         log_step "${MSG_BEAUTIFY_INSTALLING_SHELL:-Installing} zsh"
         pkg install -y zsh &> /dev/null || { log_warn "zsh install failed"; return 1; }
     fi
+
+    # 抑制 oh-my-zsh 安装脚本的交互（CHSH=no 不改默认 shell；KEEP_ZSHRC=no 由我们覆盖）
+    # Suppress oh-my-zsh install prompts (CHSH=no leaves default shell alone;
+    # KEEP_ZSHRC=no because we'll overwrite it)
+    export RUNZSH=no CHSH=no KEEP_ZSHRC=no
     if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
         log_step "installing oh-my-zsh"
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended &> /dev/null || \
             log_warn "oh-my-zsh install failed"
     fi
+
     local p10k_dir="$HOME/.oh-my-zsh/custom/themes/powerlevel10k"
     if [[ ! -d "$p10k_dir" ]]; then
         log_step "installing powerlevel10k"
         git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$p10k_dir" &> /dev/null || \
             log_warn "powerlevel10k clone failed"
     fi
-    local zrc="$HOME/.zshrc"
-    if [[ -f "$zrc" ]] && ! grep -qF "$BEAUTIFY_MARKER" "$zrc"; then
-        sed -i.bak 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' "$zrc"
-        rm -f "${zrc}.bak"
-        printf '\n%s\n' "$BEAUTIFY_MARKER" >> "$zrc"
-    elif [[ ! -f "$zrc" ]]; then
-        cat > "$zrc" <<'EOF'
+
+    # 顺手装两个常用插件 / Bundle two useful plugins
+    local custom="$HOME/.oh-my-zsh/custom/plugins"
+    [[ ! -d "$custom/zsh-autosuggestions" ]] && \
+        git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git "$custom/zsh-autosuggestions" &> /dev/null
+    [[ ! -d "$custom/zsh-syntax-highlighting" ]] && \
+        git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git "$custom/zsh-syntax-highlighting" &> /dev/null
+
+    # 写完整 .zshrc：覆盖任何旧版本 / Write a complete .zshrc, overriding any prior version
+    cat > "$HOME/.zshrc" <<'EOF'
 # xynrin-beautify
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git)
+plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
 source $ZSH/oh-my-zsh.sh
+[[ -f ~/.p10k.zsh ]] && source ~/.p10k.zsh
+EOF
+
+    # 预制 p10k 配置：彻底跳过 powerlevel10k configure 向导
+    # Pre-baked p10k config: skip the powerlevel10k configure wizard entirely
+    cat > "$HOME/.p10k.zsh" <<'EOF'
+# xynrin-beautify - pre-baked p10k config (no wizard)
+'builtin' 'local' '-a' 'p10k_config_opts'
+[[ ! -o 'aliases'         ]] || p10k_config_opts+=('aliases')
+[[ ! -o 'sh_glob'         ]] || p10k_config_opts+=('sh_glob')
+[[ ! -o 'no_brace_expand' ]] || p10k_config_opts+=('no_brace_expand')
+'builtin' 'setopt' 'no_aliases' 'no_sh_glob' 'brace_expand'
+
+() {
+  emulate -L zsh -o extended_glob
+  unset -m '(POWERLEVEL9K_*|DEFAULT_USER)~POWERLEVEL9K_GITSTATUS_DIR'
+
+  typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs prompt_char)
+  typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time time)
+  typeset -g POWERLEVEL9K_MODE=nerdfont-complete
+  typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
+  typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND=76
+  typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND=196
+  typeset -g POWERLEVEL9K_DIR_FOREGROUND=39
+  typeset -g POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=103
+  typeset -g POWERLEVEL9K_VCS_BRANCH_FOREGROUND=141
+  typeset -g POWERLEVEL9K_TIME_FOREGROUND=66
+  typeset -g POWERLEVEL9K_TIME_FORMAT='%D{%H:%M:%S}'
+  typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
+  typeset -g POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
+}
+
+(( ${#p10k_config_opts} )) && setopt ${p10k_config_opts[@]}
+'builtin' 'unset' 'p10k_config_opts'
+EOF
+
+    # 让下次终端会话直接进入 zsh（Termux 里没有 chsh）
+    # Auto-launch zsh in the next terminal session (Termux has no chsh)
+    local rc="$HOME/.bashrc"
+    touch "$rc"
+    if ! grep -qF "xynrin-beautify-zsh-launch" "$rc"; then
+        cat >> "$rc" <<'EOF'
+
+# xynrin-beautify-zsh-launch
+[ -x "$(command -v zsh)" ] && [ -z "$ZSH_VERSION" ] && exec zsh -l
 EOF
     fi
-    log_ok "zsh + oh-my-zsh + powerlevel10k configured"
-    log_info "${MSG_BEAUTIFY_CHSH_HINT:-To switch shell run: chsh -s} $(command -v zsh)"
+
+    log_ok "zsh + oh-my-zsh + powerlevel10k 已配置（跳过向导，下次进入终端自动启用）"
+    log_info "立即体验：当前会话执行 exec zsh -l / Try now: run 'exec zsh -l'"
 }
 
 beautify_setup_fish() {
@@ -256,6 +311,65 @@ beautify_uninstall_action() {
     log_ok "${MSG_BEAUTIFY_REMOVED:-Beautify uninstalled}"
 }
 
+# 主题预览块（fzf --preview 调用） / Theme preview block (called by fzf --preview)
+beautify_preview() {
+    local sel="$1"
+    case "$sel" in
+        1*) cat <<'EOF'
+Dracula  紫黑配色 / purple-on-black
+
+  bg #282a36   fg #f8f8f2
+  [38;2;255;85;85m███[0m red    [38;2;80;250;123m███[0m green
+  [38;2;241;250;140m███[0m yellow [38;2;189;147;249m███[0m purple
+  [38;2;255;121;198m███[0m pink   [38;2;139;233;253m███[0m cyan
+
+  ❯ ls
+  documents/  README.md  src/
+EOF
+        ;;
+        2*) cat <<'EOF'
+Catppuccin  柔和暖色 / soft pastel
+
+  bg #1e1e2e   fg #cdd6f4
+  [38;2;243;139;168m███[0m red    [38;2;166;227;161m███[0m green
+  [38;2;249;226;175m███[0m yellow [38;2;137;180;250m███[0m blue
+  [38;2;245;194;231m███[0m pink   [38;2;148;226;213m███[0m teal
+
+  ❯ ls
+  documents/  README.md  src/
+EOF
+        ;;
+        3*) cat <<'EOF'
+Nord  冷色系 / cool blues
+
+  bg #2e3440   fg #d8dee9
+  [38;2;191;97;106m███[0m red    [38;2;163;190;140m███[0m green
+  [38;2;235;203;139m███[0m yellow [38;2;129;161;193m███[0m blue
+  [38;2;180;142;173m███[0m purple [38;2;136;192;208m███[0m cyan
+
+  ❯ ls
+  documents/  README.md  src/
+EOF
+        ;;
+        4*) cat <<'EOF'
+Uninstall / 卸载
+
+  Removes:
+    ~/.termux/colors.properties     (xynrin marker)
+    ~/.termux/termux.properties     (xynrin marker)
+    ~/.termux/font.ttf
+    ~/.config/starship.toml         (xynrin marker)
+    xynrin-beautify lines in:
+      ~/.bashrc / ~/.zshrc / ~/.config/fish/config.fish
+EOF
+        ;;
+        0*) cat <<'EOF'
+Back / 返回
+EOF
+        ;;
+    esac
+}
+
 beautify_action() {
     local options=(
         "1) ${MSG_BEAUTIFY_DRACULA:-Dracula}"
@@ -267,8 +381,13 @@ beautify_action() {
     log_info "${MSG_BEAUTIFY_TITLE:-Beautify}"
     local picked
     if command -v fzf &> /dev/null; then
-        picked="$(printf '%s\n' "${options[@]}" | fzf --height=40% --reverse --no-info --border=rounded \
-            --prompt="theme > ")" || return 0
+        # 把自身作为 preview 命令调用 / call self as the preview command
+        local self="${BASH_SOURCE[0]}"
+        picked="$(printf '%s\n' "${options[@]}" | fzf \
+            --height=70% --reverse --no-info --border=rounded \
+            --ansi --prompt="theme > " \
+            --preview="bash -c 'source \"$self\" && beautify_preview \"\$1\"' _ {}" \
+            --preview-window=right,55%,wrap)" || return 0
     else
         printf '  %s\n' "${options[@]}"
         echo -n "> "
