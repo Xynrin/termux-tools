@@ -62,7 +62,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn run<B: ratatui::backend::Backend>(
+fn run<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut Terminal<B>,
     bootstrap: bool,
     show_notes: bool,
@@ -71,6 +71,35 @@ fn run<B: ratatui::backend::Backend>(
     while !app.should_quit {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         app.tick()?;
+
+        // 交互式动作：挂起 ratatui，把真终端交给 bash，跑完恢复
+        // Interactive action: suspend ratatui, hand the real TTY to bash, restore after.
+        if let Some(args) = app.pending_interactive.take() {
+            suspend(terminal)?;
+            let _ = runner::run_interactive(args, app.lang);
+            resume(terminal)?;
+            // 语言切换后重建 i18n（bash 端写入了 .lang_pref）
+            // After a language switch the bash side has written .lang_pref, rebuild i18n.
+            let new_lang = i18n::Lang::detect();
+            if new_lang != app.lang {
+                app.lang = new_lang;
+                app.i18n = i18n::I18n::new(new_lang);
+            }
+        }
     }
+    Ok(())
+}
+
+fn suspend<B: ratatui::backend::Backend + io::Write>(terminal: &mut Terminal<B>) -> io::Result<()> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    terminal.show_cursor()?;
+    Ok(())
+}
+
+fn resume<B: ratatui::backend::Backend + io::Write>(terminal: &mut Terminal<B>) -> io::Result<()> {
+    enable_raw_mode()?;
+    execute!(terminal.backend_mut(), EnterAlternateScreen, EnableMouseCapture)?;
+    terminal.clear()?;
     Ok(())
 }

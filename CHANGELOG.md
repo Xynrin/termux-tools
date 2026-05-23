@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-05-23
+
+### Fixed
+- 修复交互式选项卡死的 bug / Fix UI hang on interactive options — language / mirror / beautify / proot install & manage all use `fzf` and `read`, but with ratatui holding the alt-screen and piping stdio the bash child had no usable TTY. Now those actions suspend ratatui and run with the real terminal, then restore the TUI.
+
 ## [3.1.0] - 2026-05-23
 
 ### Added

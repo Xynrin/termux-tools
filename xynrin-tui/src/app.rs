@@ -47,6 +47,16 @@ impl Action {
             Action::Beautify      => &["--menu-beautify"],
         }
     }
+
+    // 需要 fzf / read 的动作：必须挂起 ratatui，把真终端交给 bash
+    // Actions that use fzf/read must suspend ratatui and hand the real TTY to bash.
+    pub fn is_interactive(self) -> bool {
+        matches!(
+            self,
+            Action::ProotInstall | Action::ProotManage | Action::Mirror
+                | Action::Language | Action::Beautify
+        )
+    }
 }
 
 pub enum Screen {
@@ -65,12 +75,14 @@ pub struct App {
     pub screen: Screen,
     pub menu: ListState,
     pub log: VecDeque<LogLine>,
-    pub log_scroll: Option<usize>, // None = follow tail
+    pub log_scroll: Option<usize>,
     pub runner: Option<Runner>,
     pub focus_log: bool,
     pub should_quit: bool,
     pub bootstrap_mode: bool,
     pub show_notes_only: bool,
+    // 主循环用：交互式动作请求 / Interactive action request, handled by main loop
+    pub pending_interactive: Option<&'static [&'static str]>,
 }
 
 impl App {
@@ -97,6 +109,7 @@ impl App {
             should_quit: false,
             bootstrap_mode,
             show_notes_only,
+            pending_interactive: None,
         }
     }
 
@@ -211,9 +224,16 @@ impl App {
                 if idx == 7 { self.should_quit = true; return; }
                 if let Some(action) = Action::from_index(idx) {
                     if action == Action::Update {
-                        // 先检查，再展示 changelog 确认
                         self.start_runner(&["--menu-update-check"]);
                         self.screen = Screen::Running { action, finished: false, exit_ok: None };
+                    } else if action.is_interactive() {
+                        // 交给主循环挂起 ratatui 后用真实 TTY 跑
+                        // Hand off to main loop: suspend ratatui, run with real TTY
+                        self.pending_interactive = Some(action.bash_args());
+                        if action == Action::Language {
+                            // 语言切换后，菜单文案需要刷新
+                            // Flag handled in main: reload lang after returning
+                        }
                     } else {
                         self.start_runner(action.bash_args());
                         self.screen = Screen::Running { action, finished: false, exit_ok: None };

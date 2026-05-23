@@ -26,16 +26,17 @@ impl Runner {
     }
 }
 
+// 流式动作：捕获 stdout/stderr，通过 mpsc 推回 TUI
+// Streaming action: capture stdout/stderr, push lines back via mpsc.
 pub fn spawn(args: &[&str], lang: Lang) -> std::io::Result<Runner> {
     let bash_path = locate_bash_main();
     let mut cmd = Command::new("bash");
     cmd.arg(&bash_path);
-    for a in args {
-        cmd.arg(a);
-    }
+    for a in args { cmd.arg(a); }
     cmd.env("LANG", match lang { Lang::Zh => "zh_CN.UTF-8", Lang::En => "en_US.UTF-8" });
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("piped");
@@ -45,18 +46,12 @@ pub fn spawn(args: &[&str], lang: Lang) -> std::io::Result<Runner> {
     pump(stdout, tx.clone(), false);
     pump(stderr, tx.clone(), true);
 
-    // 退出码线程：等 child 结束后发 Done
-    // Exit-code thread: send Done after child exits
     let id = child.id();
     thread::spawn(move || {
-        // 复用 PID 等死亡：用 waitpid 风格，在 unix 下安全
-        // 这里通过文件 /proc/<pid> 是否存在来轮询，简单跨平台
         loop {
             #[cfg(unix)]
             {
-                if !std::path::Path::new(&format!("/proc/{}", id)).exists() {
-                    break;
-                }
+                if !std::path::Path::new(&format!("/proc/{}", id)).exists() { break; }
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
@@ -64,6 +59,24 @@ pub fn spawn(args: &[&str], lang: Lang) -> std::io::Result<Runner> {
     });
 
     Ok(Runner { rx, child })
+}
+
+// 交互式动作：直接继承 stdio，用真实 TTY 跑 fzf/read
+// Interactive action: inherit stdio so fzf/read get a real TTY.
+// 调用前由 main loop 负责挂起 ratatui，结束后恢复
+// The main loop is responsible for suspending ratatui before this and
+// restoring afterwards.
+pub fn run_interactive(args: &[&str], lang: Lang) -> std::io::Result<i32> {
+    let bash_path = locate_bash_main();
+    let mut cmd = Command::new("bash");
+    cmd.arg(&bash_path);
+    for a in args { cmd.arg(a); }
+    cmd.env("LANG", match lang { Lang::Zh => "zh_CN.UTF-8", Lang::En => "en_US.UTF-8" });
+    cmd.stdin(Stdio::inherit());
+    cmd.stdout(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
+    let status = cmd.status()?;
+    Ok(status.code().unwrap_or(-1))
 }
 
 fn pump<R: std::io::Read + Send + 'static>(reader: R, tx: Sender<RunMsg>, is_stderr: bool) {
@@ -74,9 +87,7 @@ fn pump<R: std::io::Read + Send + 'static>(reader: R, tx: Sender<RunMsg>, is_std
             if is_stderr && !line.starts_with("::") {
                 ev.level = Level::Warn;
             }
-            if tx.send(RunMsg::Line(ev)).is_err() {
-                break;
-            }
+            if tx.send(RunMsg::Line(ev)).is_err() { break; }
         }
     });
 }
@@ -95,3 +106,4 @@ fn locate_bash_main() -> String {
     }
     "/data/data/com.termux/files/usr/bin/xynrin-bash".into()
 }
+
