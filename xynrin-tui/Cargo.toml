@@ -1,0 +1,22 @@
+[package]
+name = "xynrin-tui"
+version = "3.0.0"
+edition = "2021"
+authors = ["Xynrin"]
+license = "GPL-3.0"
+description = "Termux helper TUI written in Rust+ratatui"
+
+[[bin]]
+name = "xynrin-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
