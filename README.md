@@ -5,16 +5,16 @@
 **A TUI helper tool for Termux beginners**
 
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.0.0-brightgreen.svg)](scripts/version)
+[![Version](https://img.shields.io/badge/version-3.1.0-brightgreen.svg)](scripts/version)
 [![Platform](https://img.shields.io/badge/platform-Termux-black.svg)](https://termux.dev)
 
-[中文 README](README.zh.md) · [Issues](https://github.com/Xynrin/termux-tools/issues)
+[中文 README](README.zh.md) · [Issues](https://github.com/Xynrin/termux-tools/issues) · [Changelog](CHANGELOG.md)
 
 </div>
 
-> **v3.0.0**: TUI rewritten in **Rust + ratatui** for a smoother native interface. The bash version is kept as a fallback and is still the engine behind every action — Rust just drives the UI. Existing users: run `xynrin update` to migrate seamlessly.
+> **v3.1.0**: streaming-log TUI with split panels, semantic color levels, and live scrolling. Offline `CHANGELOG.md` rendered inside the TUI on every update — **zero GitHub API calls**. proot manage now supports delete; beautify adds zsh / fish prompt setups.
 >
-> **v2.0.0**: command renamed from `termux-tools` to `xynrin` (the official `termux-tools` package conflicts). Existing users: run `termux-tools update` once and you'll be migrated automatically.
+> **v3.0.0**: TUI rewritten in **Rust + ratatui**, bash kept as fallback engine.
 
 ## One-line install
 
@@ -22,12 +22,7 @@
 curl -sL https://raw.githubusercontent.com/Xynrin/termux-tools/main/bootstrap.sh | bash
 ```
 
-The bootstrap script will:
-1. Show the logo + version + author + repo
-2. Clone the repo to `~/termux-tools`
-3. Install dependencies; try to fetch the pre-built **Rust TUI binary** for your CPU, fall back to the bash TUI if download fails
-4. Install Ubuntu via `proot-distro` and configure aliases (e.g. `ubuntu`)
-5. Print configured aliases, then auto-launch the TUI
+The bootstrap installs the minimum (curl + git), clones the repo, and hands off to the Rust TUI which streams every remaining setup step (pkg upgrade, fzf/proot-distro, default Ubuntu container, aliases) inside a live log panel.
 
 ## Manual install
 
@@ -37,85 +32,73 @@ cd ~/termux-tools
 bash install.sh
 ```
 
-## Usage
+## CLI
 
 ```bash
-xynrin              # open TUI (Rust if available, bash otherwise)
-xynrin-bash         # always the bash TUI
-xynrin help         # CLI help
-xynrin version      # show version
-xynrin update       # check & pull updates
+xynrin                          # main TUI
+xynrin update                   # check + show changelog + confirm + upgrade
+xynrin update --show-notes      # show this version's changelog (offline)
+xynrin sysinfo                  # plain-text system info
+xynrin --bootstrap              # first-time TUI setup flow
+xynrin help / version
+xynrin-bash                     # always the bash fallback engine
 ```
 
 ## TUI menu
 
-| Key | Action |
-|:---:|---|
-| `1` | Update xynrin |
-| `2` | Install distro with proot |
-| `3` | List distro aliases (only real, usable ones) |
-| `4` | System info |
-| `5` | Configure mirror sources |
-| `6` | Change language |
-| `7` | Beautify Termux |
-| `8` | Exit |
+| # | Action |
+|:-:|---|
+| 1 | Update xynrin |
+| 2 | Install proot distro |
+| 3 | Manage installed distros (login / **remove** with alias cleanup) |
+| 4 | System info (self-rendered, no fastfetch dep) |
+| 5 | Configure mirror sources |
+| 6 | Change language |
+| 7 | Beautify Termux (theme + bash/zsh/fish prompt) |
+| 8 | Exit |
 
-## Architecture (v3.0.0)
+Keys: `↑/↓` or `j/k` to select · `1..8` jump · `Enter` run · `Tab` focus log/menu · `PgUp/PgDn` scroll log · `Esc` cancel running action · `q` quit.
+
+## Architecture
 
 ```
 ┌─────────────────────────┐
-│  xynrin  (Rust TUI)     │  ← preferred, native binary
+│  xynrin  (Rust TUI)     │  ← preferred, native binary, ratatui split-pane
 └───────────┬─────────────┘
-            │ delegates to
+            │ spawns + captures stdout/stderr via ::level:: protocol
             ▼
 ┌─────────────────────────┐
-│  xynrin-bash  (bash)    │  ← actual implementation, fallback TUI
+│  xynrin-bash → modules/ │  ← bash engine; one module per feature
 └─────────────────────────┘
 ```
 
-The Rust binary handles the menu UI; every concrete action (install distro, update, mirror, beautify…) is dispatched as `xynrin-bash --menu-<action>`. If the Rust binary isn't available for your CPU, `xynrin` is just a symlink to the bash version, so nothing breaks.
+Every action runs as `xynrin-bash --menu-<name>`. Each line prefixed `::step::`, `::ok::`, `::warn::`, `::err::`, `::info::` is colorized in the log panel; everything else is best-effort fuzzy matched.
 
-## Distro aliases
+## Offline release notes
 
-After installing a distro through option `2`, an alias is added to `~/.bashrc`. Run `source ~/.bashrc` (or restart the terminal) and you can log in directly:
+`CHANGELOG.md` is `include_str!`'d into the Rust binary at compile time. `xynrin update` shows the current version's notes before pulling, and `xynrin update --show-notes` displays them after the upgrade exec. **No HTTP client, no `api.github.com`, no rate-limit risk.**
 
-```bash
-ubuntu      # = proot-distro login ubuntu
-debian      # = proot-distro login debian
-```
-
-Option `3` only lists aliases for distros that are **actually installed and properly aliased** — no stale or fake entries.
-
-## Mirror sources (option 5)
-
-Quickly switch the Termux APT mirror. Built-in choices:
-
-- Tsinghua University (China)
-- USTC (China)
-- Official `packages.termux.dev`
-- Or use `termux-change-repo` interactively
+`scripts/release.sh` (and the GitHub Actions workflow) extract the same `## [X.Y.Z]` section via `scripts/extract-changelog.sh` and publish it as the GitHub Release body via `gh` CLI.
 
 ## Project structure
 
 ```
 termux-tools/
-├── bootstrap.sh          # one-line online installer
-├── install.sh            # main installer (Rust binary + bash fallback)
+├── CHANGELOG.md
+├── bootstrap.sh
+├── install.sh
 ├── tui/
-│   ├── xynrin            # bash TUI (the engine, always installed)
-│   └── lang/{zh,en}.sh   # language packs
-├── xynrin-tui/           # Rust + ratatui TUI source
+│   ├── xynrin                 (thin dispatcher)
+│   ├── lang/{zh,en}.sh
+│   └── modules/{update,proot,sysinfo,mirror,beautify,language,bootstrap,_common}.sh
+├── xynrin-tui/                (Rust + ratatui, no HTTP deps)
 │   ├── Cargo.toml
-│   └── src/main.rs
-├── install-scripts/
-│   └── install-tui       # symlink refresher
+│   └── src/{main,app,i18n,changelog,log_event,runner}.rs + ui/{mod,banner,menu,log_panel,notes_panel,footer}.rs
 ├── scripts/
-│   ├── version           # version file
-│   └── release.sh        # tag + release helper
-├── .github/workflows/
-│   └── release.yml       # cross-compile Rust binaries on tag
-├── LICENSE               # GPL-v3
-└── README.{md,zh.md}
+│   ├── version
+│   ├── extract-changelog.sh
+│   └── release.sh
+└── .github/workflows/release.yml
 ```
 
 ## License
