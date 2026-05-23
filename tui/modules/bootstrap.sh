@@ -38,11 +38,88 @@ bootstrap_action() {
     # Core deps: curl/git for bootstrap itself; fzf/ncurses-utils for the TUI;
     # proot-distro is now lazy-installed only when the user picks option 2.
     log_step "${MSG_BOOTSTRAP_PKG_INSTALL:-Installing dependencies}"
-    pkg install -y curl git wget fzf ncurses-utils || {
+    pkg install -y curl git wget fzf ncurses-utils tree fastfetch || {
         log_err "core dependency install failed"
         return 1
     }
 
+    # 给 tree / fastfetch / cat 加图标 + 配色（写入所有现存 shell rc）
+    # Add icons + color to tree / fastfetch / cat across every existing shell rc.
+    bootstrap_pretty_tools
+
     log_ok "${MSG_BOOTSTRAP_DONE:-Setup complete}"
     log_info "${MSG_BOOTSTRAP_HINT_DISTRO:-Tip: run option 2 to install a Linux distro on demand}"
+}
+
+# 装 lsd（带图标的 tree/ls 替代品）+ bat（带语法高亮的 cat 替代品），
+# 然后在所有 shell rc 里写 alias，让用户开箱即用
+# Install lsd (tree/ls with icons) + bat (cat with syntax highlight),
+# then alias them across every shell rc so the user gets pretty defaults.
+bootstrap_pretty_tools() {
+    log_step "${MSG_BOOTSTRAP_PRETTY:-Installing lsd + bat (icons + colors)}"
+    pkg install -y lsd bat 2>/dev/null || log_warn "lsd/bat install had warnings"
+
+    local marker="# xynrin-pretty-tools"
+    local block=$'\n'"$marker"$'\n'
+    block+=$'command -v lsd >/dev/null 2>&1 && {\n'
+    block+=$'    alias ls=\'lsd --icon=auto --color=auto\'\n'
+    block+=$'    alias ll=\'lsd -l --icon=auto --color=auto\'\n'
+    block+=$'    alias la=\'lsd -la --icon=auto --color=auto\'\n'
+    block+=$'    alias tree=\'lsd --tree --icon=auto --color=auto\'\n'
+    block+=$'}\n'
+    block+=$'command -v bat >/dev/null 2>&1 && alias cat=\'bat --paging=never --style=plain\'\n'
+    block+=$'command -v fastfetch >/dev/null 2>&1 && alias neofetch=\'fastfetch\'\n'
+
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        [[ -f "$rc" ]] || touch "$rc"
+        if ! grep -qF "$marker" "$rc" 2>/dev/null; then
+            printf '%s' "$block" >> "$rc"
+        fi
+    done
+
+    # fish 语法不一样 / fish has its own alias syntax
+    local fish_rc="$HOME/.config/fish/config.fish"
+    if command -v fish &>/dev/null || [[ -d "$HOME/.config/fish" ]]; then
+        mkdir -p "$(dirname "$fish_rc")"
+        touch "$fish_rc"
+        if ! grep -qF "$marker" "$fish_rc" 2>/dev/null; then
+            {
+                echo ""
+                echo "$marker"
+                echo "if command -v lsd >/dev/null 2>&1"
+                echo "    alias ls 'lsd --icon=auto --color=auto'"
+                echo "    alias ll 'lsd -l --icon=auto --color=auto'"
+                echo "    alias la 'lsd -la --icon=auto --color=auto'"
+                echo "    alias tree 'lsd --tree --icon=auto --color=auto'"
+                echo "end"
+                echo "command -v bat >/dev/null 2>&1; and alias cat 'bat --paging=never --style=plain'"
+                echo "command -v fastfetch >/dev/null 2>&1; and alias neofetch fastfetch"
+            } >> "$fish_rc"
+        fi
+    fi
+
+    # 让 fastfetch 启动时自动跑一次（仅交互式 shell，避免污染脚本）
+    # Auto-run fastfetch on shell startup (interactive only, won't break scripts).
+    local greet_marker="# xynrin-fastfetch-greet"
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        [[ -f "$rc" ]] || continue
+        if ! grep -qF "$greet_marker" "$rc" 2>/dev/null; then
+            {
+                echo ""
+                echo "$greet_marker"
+                echo 'case $- in *i*) command -v fastfetch >/dev/null 2>&1 && fastfetch ;; esac'
+            } >> "$rc"
+        fi
+    done
+    if [[ -f "$HOME/.config/fish/config.fish" ]]; then
+        if ! grep -qF "$greet_marker" "$HOME/.config/fish/config.fish" 2>/dev/null; then
+            {
+                echo ""
+                echo "$greet_marker"
+                echo "status is-interactive; and command -v fastfetch >/dev/null 2>&1; and fastfetch"
+            } >> "$HOME/.config/fish/config.fish"
+        fi
+    fi
+
+    log_ok "${MSG_BOOTSTRAP_PRETTY_DONE:-tree/cat/fastfetch dressed up}"
 }

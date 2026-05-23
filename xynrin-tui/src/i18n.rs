@@ -58,6 +58,7 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("hint.notes", "↑/↓ 滚动 · Enter 返回 · q 退出");
             m.insert("hint.bootstrap", "Esc 跳过当前步骤 · Enter 完成后进入主菜单");
             m.insert("running.title", "实时日志");
+            m.insert("running.scrolling", "手动滚动");
             m.insert("running.empty", "选择左侧菜单项后按 Enter 执行");
             m.insert("running.done", "操作完成");
             m.insert("running.failed", "操作失败");
@@ -92,6 +93,7 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("hint.notes", "↑/↓ scroll · Enter back · q quit");
             m.insert("hint.bootstrap", "Esc skip step · Enter back to menu when done");
             m.insert("running.title", "Live log");
+            m.insert("running.scrolling", "manual scroll");
             m.insert("running.empty", "Pick a menu item and press Enter");
             m.insert("running.done", "Done");
             m.insert("running.failed", "Failed");

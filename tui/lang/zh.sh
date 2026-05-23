@@ -125,6 +125,9 @@ MSG_BOOTSTRAP_PKG_UPDATE="正在更新软件包索引..."
 MSG_BOOTSTRAP_PKG_INSTALL="正在安装依赖..."
 MSG_BOOTSTRAP_UBUNTU="正在安装默认容器 Ubuntu..."
 MSG_BOOTSTRAP_DONE="部署完成，进入主菜单"
+MSG_BOOTSTRAP_HINT_DISTRO="提示：选项 2 可按需安装 Linux 发行版"
+MSG_BOOTSTRAP_PRETTY="正在安装 lsd / bat（带图标 + 高亮）..."
+MSG_BOOTSTRAP_PRETTY_DONE="tree / cat / fastfetch 已美化"
 
 # CHANGELOG / 更新确认
 MSG_CHANGELOG_TITLE="更新日志"

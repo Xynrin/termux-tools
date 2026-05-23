@@ -125,6 +125,9 @@ MSG_BOOTSTRAP_PKG_UPDATE="Updating package index..."
 MSG_BOOTSTRAP_PKG_INSTALL="Installing dependencies..."
 MSG_BOOTSTRAP_UBUNTU="Installing default container Ubuntu..."
 MSG_BOOTSTRAP_DONE="Setup complete, entering main menu"
+MSG_BOOTSTRAP_HINT_DISTRO="Tip: run option 2 to install a Linux distro on demand"
+MSG_BOOTSTRAP_PRETTY="Installing lsd / bat (icons + syntax highlight)..."
+MSG_BOOTSTRAP_PRETTY_DONE="tree / cat / fastfetch dressed up"
 
 # CHANGELOG / Update confirm
 MSG_CHANGELOG_TITLE="Changelog"

@@ -12,7 +12,13 @@ use ratatui::{
 use crate::app::App;
 
 pub fn draw(f: &mut Frame, area: Rect, app: &App) {
-    let title = if app.log_scroll.is_some() { " 实时日志 [手动滚动] " } else { " 实时日志 " };
+    let base = app.i18n.t("running.title");
+    let scrolling = app.i18n.t("running.scrolling");
+    let title = if app.log_scroll.is_some() {
+        format!(" {} [{}] ", base, scrolling)
+    } else {
+        format!(" {} ", base)
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
