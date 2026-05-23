@@ -1,62 +1,122 @@
 #!/usr/bin/env bash
 #
-# scripts/release.sh - 自动打 tag 并发布 GitHub Release
-# Auto-tag and publish a GitHub Release based on scripts/version
+# scripts/release.sh - 自动从 CHANGELOG.md 抽取本版本说明，打 tag 并发布 GitHub Release
+# Auto-extract this version's notes from CHANGELOG.md, tag, and publish a Release
 #
 # 用法 / Usage:
-#   bash scripts/release.sh              # 用 scripts/version 打 tag 并发布
-#   bash scripts/release.sh --dry-run    # 只演示不执行
+#   bash scripts/release.sh              # 完整流程：抽取 → 打 tag → push → release edit
+#   bash scripts/release.sh --notes-only # 只刷新已有 release 的 notes（不重打 tag）
+#   bash scripts/release.sh --dry-run    # 演示，不执行写操作
 #
 
 set -euo pipefail
 
-DRY_RUN=0
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+MODE="full"
+case "${1:-}" in
+    --notes-only) MODE="notes-only" ;;
+    --dry-run)    MODE="dry-run" ;;
+    "") ;;
+    *) echo "Unknown flag: $1" >&2; exit 2 ;;
+esac
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJECT_ROOT"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-VERSION="$(cat scripts/version | tr -d '[:space:]')"
+VERSION="$(tr -d '[:space:]' < scripts/version)"
 TAG="v${VERSION}"
 
-echo "==> Version: $VERSION  Tag: $TAG"
+echo "==> Version: $VERSION  Tag: $TAG  Mode: $MODE"
 
-# 工作区必须干净（避免遗漏未提交的改动）/ Working tree must be clean
+# ============================================================
+# 1. 从 CHANGELOG.md 抽取本版本段落（共享脚本）
+# Extract this version's section from CHANGELOG.md (shared)
+# ============================================================
+NOTES_FILE="$(mktemp -t xynrin-notes.XXXXXX)"
+trap 'rm -f "$NOTES_FILE"' EXIT
+
+bash "$ROOT/scripts/extract-changelog.sh" "$VERSION" > "$NOTES_FILE"
+
+if [[ ! -s "$NOTES_FILE" ]]; then
+    echo "ERROR: CHANGELOG.md has no section for version $VERSION." >&2
+    echo "       Add a '## [$VERSION] - YYYY-MM-DD' block before releasing." >&2
+    exit 1
+fi
+
+echo "==> Release notes preview:"
+echo "----------------------------------------"
+head -20 "$NOTES_FILE"
+[[ "$(wc -l < "$NOTES_FILE")" -gt 20 ]] && echo "..."
+echo "----------------------------------------"
+
+# ============================================================
+# 2. notes-only: 仅刷新现有 release 说明
+# notes-only: just refresh notes of an existing release
+# ============================================================
+if [[ "$MODE" == "notes-only" ]]; then
+    if ! command -v gh &> /dev/null; then
+        echo "gh CLI required for --notes-only." >&2
+        exit 1
+    fi
+    echo "==> Updating notes of existing release $TAG"
+    gh release edit "$TAG" --notes-file "$NOTES_FILE"
+    echo "==> Done"
+    exit 0
+fi
+
+# ============================================================
+# 3. 完整流程：检查工作区、打 tag、push
+# Full flow: clean check, tag, push
+# ============================================================
 if [[ -n "$(git status --porcelain)" ]]; then
-    echo "ERROR: Working tree not clean. Commit or stash first."
+    echo "ERROR: Working tree not clean. Commit or stash first." >&2
     git status --short
     exit 1
 fi
 
-# tag 已存在则直接退出 / Skip if tag already exists
 if git rev-parse "$TAG" &> /dev/null; then
-    echo "Tag $TAG already exists. Skipping."
+    echo "Tag $TAG already exists locally."
+    if [[ "$MODE" != "dry-run" ]]; then
+        echo "Re-run with --notes-only to update its notes, or move the tag manually." >&2
+        exit 1
+    fi
+fi
+
+echo "==> Tagging $TAG"
+[[ "$MODE" == "dry-run" ]] || git tag -a "$TAG" -m "Release $TAG"
+
+echo "==> Pushing tag (this triggers the CI build)"
+[[ "$MODE" == "dry-run" ]] || git push origin "$TAG"
+
+# ============================================================
+# 4. CI 在后台跨平台编译；等它创建 release（带二进制和占位 body）后，
+#    用 CHANGELOG 段覆盖 notes
+# CI runs the cross-compile in background; once it has created the
+# release with binaries, overwrite the body with the CHANGELOG section
+# ============================================================
+if [[ "$MODE" == "dry-run" ]]; then
+    echo "==> [dry-run] would wait for CI then run: gh release edit $TAG --notes-file ..."
+    echo "==> Done (dry-run)"
     exit 0
 fi
 
-# 打包源码 tarball / Build source tarball
-ARCHIVE="termux-tools-${VERSION}.tar.gz"
-echo "==> Creating archive: $ARCHIVE"
-[[ $DRY_RUN -eq 1 ]] || git archive --format=tar.gz --prefix="termux-tools-${VERSION}/" -o "/tmp/$ARCHIVE" HEAD
-
-# 创建 tag / Create tag
-echo "==> Tagging $TAG"
-[[ $DRY_RUN -eq 1 ]] || git tag -a "$TAG" -m "Release $TAG"
-
-# 推送 tag / Push tag
-echo "==> Pushing tag"
-[[ $DRY_RUN -eq 1 ]] || git push origin "$TAG"
-
-# 用 gh 创建 Release（如可用），否则提示 / Create release via gh if available
-if command -v gh &> /dev/null; then
-    echo "==> Creating GitHub release with asset"
-    [[ $DRY_RUN -eq 1 ]] || gh release create "$TAG" \
-        "/tmp/$ARCHIVE" \
-        --title "$TAG" \
-        --notes "Release $TAG. See commits since previous tag for details."
-else
-    echo "gh CLI not installed; skipping release creation."
-    echo "Asset built at: /tmp/$ARCHIVE"
+if ! command -v gh &> /dev/null; then
+    echo "gh CLI not installed. Tag is pushed; install gh and run --notes-only later." >&2
+    exit 0
 fi
 
-echo "==> Done"
+echo "==> Waiting for CI release to appear (up to 10 min)..."
+for _ in $(seq 1 60); do
+    if gh release view "$TAG" &> /dev/null; then
+        break
+    fi
+    sleep 10
+done
+
+if ! gh release view "$TAG" &> /dev/null; then
+    echo "Release not created yet. Run \`bash scripts/release.sh --notes-only\` after CI finishes." >&2
+    exit 0
+fi
+
+echo "==> Overwriting release notes from CHANGELOG.md"
+gh release edit "$TAG" --notes-file "$NOTES_FILE"
+echo "==> Done: https://github.com/Xynrin/termux-tools/releases/tag/$TAG"

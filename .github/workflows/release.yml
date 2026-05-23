@@ -81,9 +81,25 @@ jobs:
       - name: List artifacts
         run: ls -la dist/
 
+      # 从 CHANGELOG.md 抽取本版本说明（与本地 release.sh 共用同一脚本）
+      # Extract this version's notes from CHANGELOG.md (shared with local release.sh)
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Extracting notes for version: $VERSION"
+          bash scripts/extract-changelog.sh "$VERSION" > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "ERROR: CHANGELOG.md has no section for $VERSION" >&2
+            exit 1
+          fi
+          echo "----- Notes preview -----"
+          head -20 release_notes.md
+          echo "-------------------------"
+
       - name: Create / update release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: release_notes.md
           fail_on_unmatched_files: true
