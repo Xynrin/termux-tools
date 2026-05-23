@@ -311,62 +311,60 @@ beautify_uninstall_action() {
     log_ok "${MSG_BEAUTIFY_REMOVED:-Beautify uninstalled}"
 }
 
-# 主题预览块（fzf --preview 调用） / Theme preview block (called by fzf --preview)
+# 主题预览块（fzf --preview 调用）/ Theme preview block (called by fzf --preview)
+# 注意：用 $'\e[...m' 真正插入 ESC 字符，配合 fzf --ansi 才能显示颜色，
+# 否则 'EOF' 引号 heredoc 只输出字面字符串，会暴露原始转义码
+# Note: use $'\e[...m' to insert real ESC bytes; with fzf --ansi this renders
+# as color. A 'EOF'-quoted heredoc emits literal text, leaking raw escape codes.
 beautify_preview() {
     local sel="$1"
+    local R=$'\e[0m'
     case "$sel" in
-        1*) cat <<'EOF'
-Dracula  紫黑配色 / purple-on-black
-
-  bg #282a36   fg #f8f8f2
-  [38;2;255;85;85m███[0m red    [38;2;80;250;123m███[0m green
-  [38;2;241;250;140m███[0m yellow [38;2;189;147;249m███[0m purple
-  [38;2;255;121;198m███[0m pink   [38;2;139;233;253m███[0m cyan
-
-  ❯ ls
-  documents/  README.md  src/
-EOF
-        ;;
-        2*) cat <<'EOF'
-Catppuccin  柔和暖色 / soft pastel
-
-  bg #1e1e2e   fg #cdd6f4
-  [38;2;243;139;168m███[0m red    [38;2;166;227;161m███[0m green
-  [38;2;249;226;175m███[0m yellow [38;2;137;180;250m███[0m blue
-  [38;2;245;194;231m███[0m pink   [38;2;148;226;213m███[0m teal
-
-  ❯ ls
-  documents/  README.md  src/
-EOF
-        ;;
-        3*) cat <<'EOF'
-Nord  冷色系 / cool blues
-
-  bg #2e3440   fg #d8dee9
-  [38;2;191;97;106m███[0m red    [38;2;163;190;140m███[0m green
-  [38;2;235;203;139m███[0m yellow [38;2;129;161;193m███[0m blue
-  [38;2;180;142;173m███[0m purple [38;2;136;192;208m███[0m cyan
-
-  ❯ ls
-  documents/  README.md  src/
-EOF
-        ;;
-        4*) cat <<'EOF'
-Uninstall / 卸载
-
-  Removes:
-    ~/.termux/colors.properties     (xynrin marker)
-    ~/.termux/termux.properties     (xynrin marker)
-    ~/.termux/font.ttf
-    ~/.config/starship.toml         (xynrin marker)
-    xynrin-beautify lines in:
-      ~/.bashrc / ~/.zshrc / ~/.config/fish/config.fish
-EOF
-        ;;
-        0*) cat <<'EOF'
-Back / 返回
-EOF
-        ;;
+        1*)
+            printf '%s\n' "Dracula  紫黑配色 / purple-on-black"
+            echo
+            printf '%s\n' "  bg #282a36   fg #f8f8f2"
+            printf '  \e[38;2;255;85;85m███\e[0m red     \e[38;2;80;250;123m███\e[0m green\n'
+            printf '  \e[38;2;241;250;140m███\e[0m yellow  \e[38;2;189;147;249m███\e[0m purple\n'
+            printf '  \e[38;2;255;121;198m███\e[0m pink    \e[38;2;139;233;253m███\e[0m cyan\n'
+            echo
+            printf '\e[38;2;80;250;123m  ❯\e[0m ls\n'
+            printf '\e[38;2;139;233;253m  documents/  README.md  src/\e[0m\n'
+            ;;
+        2*)
+            printf '%b\n' "Catppuccin  柔和暖色 / soft pastel"
+            echo
+            printf '%b\n' "  bg #1e1e2e   fg #cdd6f4"
+            printf '  \e[38;2;243;139;168m███\e[0m red     \e[38;2;166;227;161m███\e[0m green\n'
+            printf '  \e[38;2;249;226;175m███\e[0m yellow  \e[38;2;137;180;250m███\e[0m blue\n'
+            printf '  \e[38;2;245;194;231m███\e[0m pink    \e[38;2;148;226;213m███\e[0m teal\n'
+            echo
+            printf '\e[38;2;166;227;161m  ❯\e[0m ls\n'
+            printf '\e[38;2;137;180;250m  documents/  README.md  src/\e[0m\n'
+            ;;
+        3*)
+            printf '%b\n' "Nord  冷色系 / cool blues"
+            echo
+            printf '%b\n' "  bg #2e3440   fg #d8dee9"
+            printf '  \e[38;2;191;97;106m███\e[0m red     \e[38;2;163;190;140m███\e[0m green\n'
+            printf '  \e[38;2;235;203;139m███\e[0m yellow  \e[38;2;129;161;193m███\e[0m blue\n'
+            printf '  \e[38;2;180;142;173m███\e[0m purple  \e[38;2;136;192;208m███\e[0m cyan\n'
+            echo
+            printf '\e[38;2;163;190;140m  ❯\e[0m ls\n'
+            printf '\e[38;2;129;161;193m  documents/  README.md  src/\e[0m\n'
+            ;;
+        4*)
+            printf '%s\n' "Uninstall / 卸载"
+            echo
+            printf '%s\n' "  Removes:"
+            printf '%s\n' "    ~/.termux/colors.properties     (xynrin marker)"
+            printf '%s\n' "    ~/.termux/termux.properties     (xynrin marker)"
+            printf '%s\n' "    ~/.termux/font.ttf"
+            printf '%s\n' "    ~/.config/starship.toml         (xynrin marker)"
+            printf '%s\n' "    xynrin-beautify lines in:"
+            printf '%s\n' "      ~/.bashrc / ~/.zshrc / ~/.config/fish/config.fish"
+            ;;
+        0*) printf '%s\n' "Back / 返回" ;;
     esac
 }
 
