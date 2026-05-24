@@ -13,13 +13,13 @@ use crate::app::App;
 use crate::changelog;
 
 pub fn draw(f: &mut Frame, area: Rect, app: &App, scroll: u16) {
-    let section = changelog::latest();
-    render(f, area, app, section.as_ref(), scroll, " 更新日志 ");
+    // 复用 App::new() 时缓存好的解析结果，避免每帧重新跑 changelog::all()
+    // Reuse the cached parse from App::new() so we don't reallocate Strings/Vecs every frame.
+    render(f, area, app, app.cached_notes.as_ref(), scroll, " 更新日志 ");
 }
 
 pub fn draw_for_confirm(f: &mut Frame, area: Rect, app: &App, _remote: &str) {
-    let section = changelog::latest();
-    render(f, area, app, section.as_ref(), 0, " 当前版本更新日志 ");
+    render(f, area, app, app.cached_notes.as_ref(), 0, " 当前版本更新日志 ");
 }
 
 pub fn draw_confirm_bar(f: &mut Frame, area: Rect, app: &App, remote: &str) {
