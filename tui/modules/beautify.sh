@@ -202,6 +202,19 @@ EOF
   typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time time)
   typeset -g POWERLEVEL9K_MODE=nerdfont-complete
   typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
+
+  # 圆角段：每段两端各画半圆，整条 prompt 像 pill 胶囊
+  # Rounded segments: each section bookended with a half-circle, pill-shaped prompt
+  typeset -g POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR=$''
+  typeset -g POWERLEVEL9K_RIGHT_SEGMENT_SEPARATOR=$''
+  typeset -g POWERLEVEL9K_LEFT_SUBSEGMENT_SEPARATOR=$''
+  typeset -g POWERLEVEL9K_RIGHT_SUBSEGMENT_SEPARATOR=$''
+  typeset -g POWERLEVEL9K_LEFT_PROMPT_FIRST_SEGMENT_START_SYMBOL=$''
+  typeset -g POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL=$''
+  typeset -g POWERLEVEL9K_RIGHT_PROMPT_FIRST_SEGMENT_START_SYMBOL=$''
+  typeset -g POWERLEVEL9K_RIGHT_PROMPT_LAST_SEGMENT_END_SYMBOL=$''
+  typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=' '
+
   typeset -g POWERLEVEL9K_PROMPT_CHAR_OK_VIINS_FOREGROUND=76
   typeset -g POWERLEVEL9K_PROMPT_CHAR_ERROR_VIINS_FOREGROUND=196
   typeset -g POWERLEVEL9K_DIR_FOREGROUND=39

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.5] - 2026-05-24
+
+### Fixed
+- **Esc 需要按多次才生效** / Esc required multiple presses — 主循环每 tick 只读一个事件，Resize/Mouse 排队会把 Esc 顶后面。现在每 tick 把 event 队列吃干，按一次就响应。
+- **更新后没自动跳新版** / TUI didn't auto-refresh post-upgrade — 新二进制启动时又跑一次静默检查，如果远端 tag 还没刷就误判"没更新"，绕回老菜单。新增 `XYNRIN_POST_UPGRADE=1` 环境变量，升级后 exec 时带上，新二进制识别后跳过静默检查直接进 show-notes。
+- **更新确认条不能用回车确认** / Confirm prompt didn't accept Enter — Y/Enter 都视作确认升级，Esc/N 取消，符合常规 TUI 习惯。
+
+### Added
+- **zsh p10k 圆角胶囊段** / Rounded zsh prompt segments — 给 powerlevel10k 写入圆形左右 separator（、），整条 prompt 变成 pill 胶囊样式，配合 Nerd Font 显示。
+- **架构 v3.2 路线图** / Architecture refactor pinned to v3.2 — 每个功能选项独立目录、每个 UI 子界面独立目录的全面模块化重构会作为 v3.2.0 主题，避免在 bug 修复版本里引入大改动。
+
 ## [3.1.4] - 2026-05-24
 
 ### Added

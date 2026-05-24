@@ -48,9 +48,12 @@ fn main() -> io::Result<()> {
     }
 
     // 进入主菜单前静默检查新版本：有则进 update_mode，无则正常进 TUI
-    // Silent update check before menu mode: if remote > local, switch into
-    // update_mode automatically; otherwise fall through to the menu.
-    if !bootstrap && !show_notes && !update_mode {
+    // 但升级刚完成的那次启动跳过 —— 由 XYNRIN_POST_UPGRADE 标记，避免循环
+    // Skip the silent check on the post-upgrade launch (marked via env var)
+    // so we land in show-notes / menu instead of re-prompting.
+    if !bootstrap && !show_notes && !update_mode
+        && std::env::var("XYNRIN_POST_UPGRADE").ok().as_deref() != Some("1")
+    {
         if silent_update_available() {
             update_mode = true;
         }
@@ -76,6 +79,7 @@ fn main() -> io::Result<()> {
 
     // 升级成功后无感重启 —— exec 替换当前进程，旧 PID 直接消失
     // After upgrade success, exec replaces the process; old PID/memory go away.
+    // 同时设 XYNRIN_POST_UPGRADE=1 让新二进制跳过静默检查、直接进 show-notes
     if restart {
         #[cfg(unix)]
         {
@@ -83,7 +87,11 @@ fn main() -> io::Result<()> {
             use std::process::Command;
             let exe = std::env::current_exe()
                 .unwrap_or_else(|_| std::path::PathBuf::from("xynrin"));
-            let _err = Command::new(exe).arg("update").arg("--show-notes").exec();
+            let _err = Command::new(exe)
+                .arg("update")
+                .arg("--show-notes")
+                .env("XYNRIN_POST_UPGRADE", "1")
+                .exec();
         }
     }
     Ok(())

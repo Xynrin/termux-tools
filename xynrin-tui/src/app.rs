@@ -202,11 +202,17 @@ impl App {
             }
         }
 
+        // 一次 tick 把所有排队事件都吃掉，避免 Esc 要按多次才生效
+        // Drain every queued event in this tick — fixes Esc-needs-multiple-presses
+        // bug where one event/tick lost keypresses behind queued Resize/Mouse events.
         if event::poll(Duration::from_millis(80))? {
-            if let Event::Key(k) = event::read()? {
-                if k.kind == KeyEventKind::Press {
-                    self.on_key(k.code);
+            loop {
+                if let Event::Key(k) = event::read()? {
+                    if k.kind == KeyEventKind::Press {
+                        self.on_key(k.code);
+                    }
                 }
+                if !event::poll(Duration::from_millis(0))? { break; }
             }
         }
         Ok(())
@@ -343,7 +349,8 @@ impl App {
 
     fn on_key_confirm(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            // Y / Enter 都视作确认升级 / Y or Enter both confirm
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                 self.start_runner(&["--menu-update-apply"]);
                 self.screen = Screen::Running { action: Action::Update, finished: false, exit_ok: None };
             }
