@@ -90,11 +90,23 @@ EOF
             ;;
     esac
 
-    cat > "$props" <<'EOF'
-# xynrin-beautify
+    # 非破坏性写入 termux.properties：先剥掉旧的 xynrin 段，再追加新段
+    # 老逻辑直接 cat > 会清掉用户自己的 extra-keys / 字体缩放等私有配置
+    # Non-destructive: strip prior xynrin block, then append fresh one.
+    # The old `cat > "$props"` clobbered users' extra-keys / font-scale tweaks.
+    touch "$props"
+    if grep -q "# xynrin-beautify-start" "$props" 2>/dev/null; then
+        sed -i '/# xynrin-beautify-start/,/# xynrin-beautify-end/d' "$props"
+    fi
+    # 收尾换行：确保 append 不会和上一行粘在一起
+    # Ensure trailing newline so the appended block starts cleanly
+    [[ -s "$props" ]] && [[ "$(tail -c1 "$props")" != $'\n' ]] && printf '\n' >> "$props"
+    cat >> "$props" <<'EOF'
+# xynrin-beautify-start
 terminal-cursor-style = bar
 terminal-cursor-blink-rate = 500
 extra-keys = [['ESC','/','-','HOME','UP','END','PGUP'],['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]
+# xynrin-beautify-end
 EOF
 
     log_step "${MSG_BEAUTIFY_DOWNLOADING_FONT:-Downloading font}"
