@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.1] - 2026-05-24
+## [3.2.2] - 2026-05-24
+
+### Fixed
+- **卸载美化时仍会删整份 termux.properties** / Uninstall still wiped user's termux.properties — v3.2.1 写入侧改成段标记非破坏性合并，但 `uninstall.sh` 的循环里 `BEAUTIFY_MARKER="# xynrin-beautify"` 是写入锚点 `# xynrin-beautify-start` 的子串，grep 命中就 `rm -f "$HOME/.termux/termux.properties"`，等于绕开了上一版做的所有保护。现在把 `termux.properties` 从循环里拎出来单独走 `sed '/start/,/end/d'`，只剥本工具的段；`colors.properties` 和 `starship.toml` 是工具完全产出的文件，仍然整删。顺手加了对 v3.2.0 旧标记（没有 -start/-end 的 4 行段）的兜底剥离，老用户重装也能干净。
+
+### 升级路径 / Upgrade Path
+- v3.2.1 → v3.2.2 完全无感：`xynrin update` 走 `git pull` + `install.sh --upgrade`，install.sh 只刷符号链接。
+- 已经在 v3.2.1 运行过卸载丢失了 `termux.properties` 的用户：从 `~/.termux/termux.properties.bak.*` 找最近的备份恢复（`themes.sh` 应用主题前一直会存时间戳备份）。
+
 
 ### Fixed
 - **子进程退出码被忽略** / Subprocess exit code ignored — `runner.rs` 的等待线程之前轮询 `/proc/<pid>` 是否存在，存在就一直等，消失就硬编码 `Done(0)`，连 `Bash` 脚本因为 `pkg install` 报错、断网、命令不存在退出非 0 也会被 UI 标成"成功"。现在用 `child.wait()` 阻塞等真实退出，把 `ExitStatus.code()`（或 `signal+128`）回传，App 拿到后写进 `last_exit_code`，`Screen::Running.exit_ok` 终于和现实一致。
