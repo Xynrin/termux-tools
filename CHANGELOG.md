@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.0] - 2026-05-24
+## [3.2.1] - 2026-05-24
+
+### Fixed
+- **子进程退出码被忽略** / Subprocess exit code ignored — `runner.rs` 的等待线程之前轮询 `/proc/<pid>` 是否存在，存在就一直等，消失就硬编码 `Done(0)`，连 `Bash` 脚本因为 `pkg install` 报错、断网、命令不存在退出非 0 也会被 UI 标成"成功"。现在用 `child.wait()` 阻塞等真实退出，把 `ExitStatus.code()`（或 `signal+128`）回传，App 拿到后写进 `last_exit_code`，`Screen::Running.exit_ok` 终于和现实一致。
+- **运行结果 UI 不显示成功/失败** / Log panel never showed run status — `running.done` / `running.failed` i18n 串和 `exit_ok` 字段一直是死代码。`log_panel` 现在根据 `exit_ok` 切边框颜色和标题：成功绿框 `[✓ 操作完成]`，失败红框 `[✗ 操作失败]`，日志读起来一眼能看出结果。
+- **覆盖用户 termux.properties** / Beautify clobbered user's termux.properties — 老逻辑直接 `cat > "$props"`，会清掉用户自己定制的 extra-keys、字体缩放、输入映射等私有配置；卸载又只删文件不还原备份。现在用 `# xynrin-beautify-start` / `# xynrin-beautify-end` 段标记非破坏性合并：先 `sed` 剥旧段，再 `cat >>` 追加新段；卸载只移除带标记的段，用户其它配置不动。
+- **每帧重新解析 CHANGELOG** / Changelog re-parsed every frame — `notes_panel::draw` 每次渲染都调 `changelog::latest()`，里面跑一遍 `RAW.lines()` 遍历 + 每行 `String::push_str` 拼 body，移动设备上一帧好几次堆分配。改成在 `App::new()` 里解析一次缓存到 `App.cached_notes`，notes 面板复用引用，零分配。
+
+### 升级路径 / Upgrade Path
+- v3.2.0 → v3.2.1 完全无感：`xynrin update` 走 `git pull` + `install.sh --upgrade`，install.sh 只刷符号链接。
+- 老用户已经写过的 `~/.termux/termux.properties`（不带 start/end 标记）这次安装新主题时会被一次性切到带标记的格式 —— 后续升级和卸载都不会再清掉用户其它行。
+
 
 ### Changed
 - **项目架构重构（向后兼容）** / Architecture refactor (backward compatible) — 每个 UI 子界面 / 每个功能模块独立目录，方便后续模块化扩展。老用户从 v3.1.5 升级路径不受影响：`tui/xynrin` 的 dispatcher 仍以 `modules/<name>` 为入口，beautify 入口保留为 `modules/beautify.sh`（现在是 26 行的薄壳，转发到 `modules/beautify/{_init,themes,shells,preview,uninstall,main}.sh`）。
