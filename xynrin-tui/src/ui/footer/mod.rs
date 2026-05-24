@@ -17,6 +17,7 @@ pub fn draw(f: &mut Frame, area: Rect, app: &App) {
         Screen::Notes { .. } => "hint.notes",
         Screen::UpdateConfirm { .. } => "hint.confirm",
         Screen::Running { .. } | Screen::Bootstrap { .. } => "hint.running",
+        Screen::Dashboard => "hint.dashboard",
     };
     let p = Paragraph::new(Line::from(Span::styled(app.i18n.t(key).to_string(),
         Style::default().fg(Color::DarkGray))))

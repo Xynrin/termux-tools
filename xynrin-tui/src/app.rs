@@ -11,11 +11,17 @@ use crate::changelog;
 use crate::i18n::{Lang, I18n, MENU_ITEMS};
 use crate::log_event::{Level, LogLine};
 use crate::runner::{self, RunMsg, Runner};
+use crate::ui::dashboard::DashboardState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Update,
     ProotInstall,
+    ProotBackup,
+    X11,
+    Ssh,
+    Cleanup,
+    Boot,
     SystemInfo,
     Mirror,
     Language,
@@ -27,10 +33,15 @@ impl Action {
         Some(match i {
             0 => Action::Update,
             1 => Action::ProotInstall,
-            2 => Action::SystemInfo,
-            3 => Action::Mirror,
-            4 => Action::Language,
-            5 => Action::Beautify,
+            2 => Action::ProotBackup,
+            3 => Action::X11,
+            4 => Action::Ssh,
+            5 => Action::Cleanup,
+            6 => Action::Boot,
+            7 => Action::SystemInfo,
+            8 => Action::Mirror,
+            9 => Action::Language,
+            10 => Action::Beautify,
             _ => return None,
         })
     }
@@ -38,6 +49,11 @@ impl Action {
         match self {
             Action::Update        => &["--menu-update-apply"],
             Action::ProotInstall  => &["--menu-proot-install"],
+            Action::ProotBackup   => &["--menu-proot-backup"],
+            Action::X11           => &["--menu-x11"],
+            Action::Ssh           => &["--menu-ssh"],
+            Action::Cleanup       => &["--menu-cleanup"],
+            Action::Boot          => &["--menu-boot"],
             Action::SystemInfo    => &["--menu-system-info"],
             Action::Mirror        => &["--menu-mirror"],
             Action::Language      => &["--menu-language"],
@@ -50,8 +66,10 @@ impl Action {
     pub fn is_interactive(self) -> bool {
         matches!(
             self,
-            Action::ProotInstall | Action::Mirror
-                | Action::Language | Action::Beautify
+            Action::ProotInstall | Action::ProotBackup
+                | Action::X11 | Action::Ssh
+                | Action::Cleanup | Action::Boot
+                | Action::Mirror | Action::Language | Action::Beautify
         )
     }
 }
@@ -63,6 +81,8 @@ pub enum Screen {
     #[allow(dead_code)]
     Running { action: Action, finished: bool, exit_ok: Option<bool> },
     Bootstrap { finished: bool },
+    // 原生 Rust 实时仪表盘 / native Rust live dashboard
+    Dashboard,
 }
 
 #[allow(dead_code)]
@@ -92,6 +112,8 @@ pub struct App {
     // CHANGELOG 缓存：App 启动时解析一次，避免每帧重新分配 String/Vec
     // Cached CHANGELOG: parsed once at App::new() to avoid per-frame realloc
     pub cached_notes: Option<changelog::Section>,
+    // 实时仪表盘的采样状态 / live dashboard sampling state
+    pub dashboard: Option<DashboardState>,
 }
 
 impl App {
@@ -126,6 +148,7 @@ impl App {
             pending_interactive: None,
             last_exit_code: None,
             cached_notes: changelog::latest(),
+            dashboard: Some(DashboardState::new()),
         }
     }
 
@@ -198,6 +221,11 @@ impl App {
 
     pub fn tick(&mut self) -> std::io::Result<()> {
         self.drain_runner();
+        // 仪表盘屏每 tick 采样一次（CPU/mem deltas）
+        // Dashboard screen samples once per tick for live gauges
+        if matches!(self.screen, Screen::Dashboard) {
+            if let Some(ds) = self.dashboard.as_mut() { ds.sample(); }
+        }
         // 启动 bootstrap（首次进入这一屏时）
         if let Screen::Bootstrap { finished: false } = self.screen {
             if self.runner.is_none() && self.log.is_empty() {
@@ -256,6 +284,14 @@ impl App {
             Screen::UpdateConfirm { .. } => self.on_key_confirm(code),
             Screen::Running { .. } => self.on_key_running(code),
             Screen::Bootstrap { .. } => self.on_key_bootstrap(code),
+            Screen::Dashboard => self.on_key_dashboard(code),
+        }
+    }
+
+    fn on_key_dashboard(&mut self, code: KeyCode) {
+        // Esc / q / Enter 都回主菜单 / Esc/q/Enter all return to main menu
+        if matches!(code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter) {
+            self.screen = Screen::Menu;
         }
     }
 
@@ -263,17 +299,29 @@ impl App {
         match code {
             KeyCode::Down | KeyCode::Char('j') => self.menu_next(),
             KeyCode::Up   | KeyCode::Char('k') => self.menu_prev(),
-            KeyCode::Char(c @ '1'..='7') => {
+            KeyCode::Char(c @ '1'..='9') => {
                 let idx = (c as u8 - b'1') as usize;
-                self.menu.select(Some(idx));
+                if idx < MENU_ITEMS.len() {
+                    self.menu.select(Some(idx));
+                }
+            }
+            KeyCode::Char('0') => {
+                // 0 → 第 10 项 / 0 maps to the 10th item
+                let idx = 9;
+                if idx < MENU_ITEMS.len() {
+                    self.menu.select(Some(idx));
+                }
             }
             KeyCode::Enter => {
                 let idx = self.menu.selected().unwrap_or(0);
-                if idx == 6 { self.should_quit = true; return; }
+                if idx == MENU_ITEMS.len() - 1 { self.should_quit = true; return; }
                 if let Some(action) = Action::from_index(idx) {
                     if action == Action::Update {
                         self.start_runner(&["--menu-update-check"]);
                         self.screen = Screen::Running { action, finished: false, exit_ok: None };
+                    } else if action == Action::SystemInfo {
+                        // 系统信息切到原生 Rust 仪表盘屏 / native dashboard screen
+                        self.screen = Screen::Dashboard;
                     } else if action.is_interactive() {
                         // 交给主循环挂起 ratatui 后用真实 TTY 跑
                         // Hand off to main loop: suspend ratatui, run with real TTY

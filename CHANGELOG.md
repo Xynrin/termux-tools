@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.2] - 2026-05-24
+## [3.3.0] - 2026-05-24
+
+### Added
+- **容器一键备份/恢复 + 启动器** / proot backup / restore / launchers — 新增菜单项「容器备份/恢复/启动器」。`tar -czf` 打包整个 rootfs 到 `~/storage/shared/xynrin-backups/<distro>-YYYYMMDD-HHMMSS.tar.gz`（无 SAF 时退回 `~/xynrin-backups/`）；恢复先 `proot-distro remove` 再解压；启动器一行命令生成 `$PREFIX/bin/xynrin-launch-<name>`，内部 `proot-distro login <distro> --shared-tmp -- <cmd> "$@"`，让容器内的应用变成 Termux 顶级命令。
+- **X11 + XFCE/LXQt 一键桌面** / X11 desktop in one tap — 新增菜单项「X11 桌面」。装 `termux-x11-nightly` + `pulseaudio` + `dbus` + 桌面包，写 `start-desktop` 启动器：拉 pulseaudio、`termux-x11 :0 -ac &`、`env DISPLAY=:0 dbus-launch --exit-with-session xfce4-session`。装完切到 Termux:X11 APK 直接看桌面。
+- **SSH 助手** / SSH helper — 新增菜单项「SSH 助手」。装 openssh + 设密码 + 启停 sshd + 显示「电脑端可复制 ssh 命令」（自动探测 wlan/rmnet IP，端口固定 8022）+ 一键开关 Termux:Boot 开机自启。
+- **存储分析与清理** / Storage analyzer & cleanup — 新增菜单项「存储分析与清理」。扫描 apt 缓存、tmp、~/.cache、每个 proot 容器实际占用、HOME top10 大文件、df 总占用；安全清理走 `apt clean` + `apt autoremove` + tmp + ~/.cache；深度清理需要 fzf 二次确认（`[Yes I really want to delete]`），可单选 proot 容器删除并清 alias。每次清完打印释放了多少 KB。
+- **Termux:Boot 开机自启控制台** / boot console — 新增菜单项「开机自启控制台」。列脚本（标 +x 状态）/ 添加预设（sshd / x11 / pulseaudio / cron / 用户模板）/ 自定义 / 删除 / enable 整个 boot 目录 / disable 改名 `.disabled` 保留内容。预设脚本自带正确的 `#!/data/data/com.termux/files/usr/bin/sh` shebang 并 `chmod +x`。
+- **原生 Rust 实时仪表盘** / native Rust live dashboard — 系统信息选项不再 fork bash 印 plain text，改进 ratatui 内嵌仪表盘屏：CPU% / Memory% / Storage% / Battery 四条 Gauge（按 50%/80% 阈值红黄绿），最近 60 秒 CPU 历史 Sparkline，外加 Arch / Kernel / Uptime / Shell / Termux 版本 / xynrin 版本。每 tick 重新采 `/proc/stat` delta + `/proc/meminfo` + `df` + `termux-battery-status` JSON。
+
+### Fixed
+- **zsh p10k 圆角失效** / zsh p10k rounded segments not rendering — `shells.sh` 里 `POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR=$''` 等 8 个字段的私用区字符 (`U+E0B6` `U+E0B4`) 在某次编辑中被吞，全部变成空字符串，整条 prompt 没了胶囊形。改用 ANSI-C `$''` / `$''` 转义重写，编辑安全。
+
+### Changed
+- **菜单从 7 项扩到 12 项** / Menu grew from 7 to 12 items — `i18n.rs` `MENU_ITEMS` + `Action` enum + `tui/xynrin` fallback_menu + `lang/{zh,en}.sh` 同步更新。`is_interactive()` 把 5 个新功能全标为需要真 TTY（fzf/read），自动走「挂起 ratatui → 真终端跑 bash → 恢复 ratatui」流程。
+
+### 升级路径 / Upgrade Path
+- v3.2.2 → v3.3.0 完全无感：`xynrin update` 走 `git pull` + `install.sh --upgrade`，install.sh 只刷符号链接。
+- 新菜单项老 fzf 兜底里数字键直接选；ratatui 主菜单 1-9 选前 9 项，0 选第 10 项，↑↓+Enter 选剩下两项。
+
 
 ### Fixed
 - **卸载美化时仍会删整份 termux.properties** / Uninstall still wiped user's termux.properties — v3.2.1 写入侧改成段标记非破坏性合并，但 `uninstall.sh` 的循环里 `BEAUTIFY_MARKER="# xynrin-beautify"` 是写入锚点 `# xynrin-beautify-start` 的子串，grep 命中就 `rm -f "$HOME/.termux/termux.properties"`，等于绕开了上一版做的所有保护。现在把 `termux.properties` 从循环里拎出来单独走 `sed '/start/,/end/d'`，只剥本工具的段；`colors.properties` 和 `starship.toml` 是工具完全产出的文件，仍然整删。顺手加了对 v3.2.0 旧标记（没有 -start/-end 的 4 行段）的兜底剥离，老用户重装也能干净。

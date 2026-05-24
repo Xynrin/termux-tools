@@ -103,17 +103,22 @@ fallback_menu() {
         local options=(
             "1) ${OPT_UPDATE}"
             "2) ${OPT_PROOT_INSTALL}"
-            "3) ${OPT_SYSTEM_INFO}"
-            "4) ${OPT_MIRROR}"
-            "5) ${OPT_LANGUAGE}"
-            "6) ${OPT_BEAUTIFY}"
-            "7) ${OPT_EXIT}"
+            "3) ${OPT_PROOT_BACKUP}"
+            "4) ${OPT_X11}"
+            "5) ${OPT_SSH}"
+            "6) ${OPT_CLEANUP}"
+            "7) ${OPT_BOOT}"
+            "8) ${OPT_SYSTEM_INFO}"
+            "9) ${OPT_MIRROR}"
+            "10) ${OPT_LANGUAGE}"
+            "11) ${OPT_BEAUTIFY}"
+            "12) ${OPT_EXIT}"
         )
         echo ""
         local picked
         if command -v fzf &> /dev/null; then
-            picked="$(printf '%s\n' "${options[@]}" | fzf --height=40% --reverse --no-info --border=rounded \
-                --prompt="${MENU_TITLE} > ")" || picked="7"
+            picked="$(printf '%s\n' "${options[@]}" | fzf --height=50% --reverse --no-info --border=rounded \
+                --prompt="${MENU_TITLE} > ")" || picked="12"
         else
             echo -e "${BOLD}${CYAN}=== ${MENU_TITLE} ===${RESET}"
             printf '  %s\n' "${options[@]}"
@@ -122,13 +127,18 @@ fallback_menu() {
             picked="${raw}) "
         fi
         case "$picked" in
-            1*) load_module update;   update_check_action; update_apply_action ;;
-            2*) load_module proot;    proot_install_action ;;
-            3*) load_module sysinfo;  sysinfo_action ;;
-            4*) load_module mirror;   mirror_action ;;
-            5*) load_module language; language_action ;;
-            6*) load_module beautify; beautify_action ;;
-            7*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
+            1*)  load_module update;   update_check_action; update_apply_action ;;
+            2*)  load_module proot;    proot_install_action ;;
+            3*)  load_module backup;   backup_action ;;
+            4*)  load_module x11;      x11_action ;;
+            5*)  load_module ssh;      ssh_action ;;
+            6*)  load_module cleanup;  cleanup_action ;;
+            7*)  load_module boot;     boot_action ;;
+            8*)  load_module sysinfo;  sysinfo_action ;;
+            9*)  load_module mirror;   mirror_action ;;
+            10*) load_module language; language_action ;;
+            11*) load_module beautify; beautify_action ;;
+            12*|0*|"") echo -e "${GREEN}${MSG_GOODBYE}${RESET}"; exit 0 ;;
             *) echo -e "${RED}${MSG_INVALID_CHOICE}${RESET}" ;;
         esac
         echo ""
@@ -158,6 +168,11 @@ main() {
         --menu-update-check)   load_module update;   update_check_action ;;
         --menu-update-apply)   load_module update;   update_apply_action ;;
         --menu-proot-install)  ensure_fzf; load_module proot;    proot_install_action ;;
+        --menu-proot-backup)   ensure_fzf; load_module backup;   backup_action ;;
+        --menu-x11)            ensure_fzf; load_module x11;      x11_action ;;
+        --menu-ssh)            ensure_fzf; load_module ssh;      ssh_action ;;
+        --menu-cleanup)        ensure_fzf; load_module cleanup;  cleanup_action ;;
+        --menu-boot)           ensure_fzf; load_module boot;     boot_action ;;
         --menu-system-info)    load_module sysinfo;  sysinfo_action ;;
         --menu-mirror)         ensure_fzf; load_module mirror;   mirror_action ;;
         --menu-language)       ensure_fzf; load_module language; language_action ;;

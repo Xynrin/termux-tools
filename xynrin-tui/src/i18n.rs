@@ -47,7 +47,12 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("menu.title", "功能菜单");
             m.insert("menu.update", "更新 xynrin");
             m.insert("menu.proot_install", "安装 proot 发行版");
-            m.insert("menu.system_info", "系统信息");
+            m.insert("menu.proot_backup", "容器备份/恢复/启动器");
+            m.insert("menu.x11", "X11 桌面（XFCE/LXQt）");
+            m.insert("menu.ssh", "SSH 助手");
+            m.insert("menu.cleanup", "存储分析与清理");
+            m.insert("menu.boot", "开机自启控制台");
+            m.insert("menu.system_info", "系统信息（实时仪表盘）");
             m.insert("menu.mirror", "切换镜像源");
             m.insert("menu.language", "切换语言");
             m.insert("menu.beautify", "美化 Termux");
@@ -57,6 +62,7 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("hint.confirm", "Y 确认升级 · N 取消");
             m.insert("hint.notes", "↑/↓ 滚动 · Enter 返回 · q 退出");
             m.insert("hint.bootstrap", "Esc 跳过当前步骤 · Enter 完成后进入主菜单");
+            m.insert("hint.dashboard", "Esc / q 返回主菜单 · 每秒自动刷新");
             m.insert("running.title", "实时日志");
             m.insert("running.scrolling", "手动滚动");
             m.insert("running.empty", "选择左侧菜单项后按 Enter 执行");
@@ -82,7 +88,12 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("menu.title", "Main Menu");
             m.insert("menu.update", "Update xynrin");
             m.insert("menu.proot_install", "Install proot distro");
-            m.insert("menu.system_info", "System info");
+            m.insert("menu.proot_backup", "Backup / restore / launchers");
+            m.insert("menu.x11", "X11 desktop (XFCE/LXQt)");
+            m.insert("menu.ssh", "SSH helper");
+            m.insert("menu.cleanup", "Storage analyzer & cleanup");
+            m.insert("menu.boot", "Termux:Boot console");
+            m.insert("menu.system_info", "System info (live dashboard)");
             m.insert("menu.mirror", "Configure mirrors");
             m.insert("menu.language", "Change language");
             m.insert("menu.beautify", "Beautify Termux");
@@ -92,6 +103,7 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
             m.insert("hint.confirm", "Y upgrade · N cancel");
             m.insert("hint.notes", "↑/↓ scroll · Enter back · q quit");
             m.insert("hint.bootstrap", "Esc skip step · Enter back to menu when done");
+            m.insert("hint.dashboard", "Esc / q back · auto-refresh every second");
             m.insert("running.title", "Live log");
             m.insert("running.scrolling", "manual scroll");
             m.insert("running.empty", "Pick a menu item and press Enter");
@@ -117,9 +129,14 @@ fn build(lang: Lang) -> HashMap<&'static str, &'static str> {
     m
 }
 
-pub const MENU_ITEMS: [&str; 7] = [
+pub const MENU_ITEMS: [&str; 12] = [
     "menu.update",
     "menu.proot_install",
+    "menu.proot_backup",
+    "menu.x11",
+    "menu.ssh",
+    "menu.cleanup",
+    "menu.boot",
     "menu.system_info",
     "menu.mirror",
     "menu.language",

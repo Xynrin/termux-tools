@@ -6,6 +6,7 @@ pub mod menu;
 pub mod log_panel;
 pub mod notes_panel;
 pub mod footer;
+pub mod dashboard;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -46,6 +47,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Screen::UpdateConfirm { remote_version } => draw_confirm(f, body, app, remote_version),
         Screen::Running { .. } => draw_split(f, body, app),
         Screen::Bootstrap { .. } => draw_log_full(f, body, app),
+        Screen::Dashboard => dashboard::draw(f, body, app),
     }
 
     footer::draw(f, footer_area, app);
