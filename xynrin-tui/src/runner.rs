@@ -2,7 +2,7 @@
 // Spawn bash subcommand; pipe stdout/stderr lines through mpsc to main thread.
 
 use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -11,13 +11,14 @@ use crate::log_event::{parse_line, LogLine, Level};
 
 pub enum RunMsg {
     Line(LogLine),
-    #[allow(dead_code)]
     Done(i32),
 }
 
 pub struct Runner {
     pub rx: Receiver<RunMsg>,
-    child: Child,
+    // 子进程在等待线程里被 wait 阻塞，主线程只保留 pgid 用于 try_kill
+    // The child is owned by the wait-thread; main keeps just the pgid for try_kill.
+    pgid: i32,
 }
 
 impl Runner {
@@ -29,7 +30,8 @@ impl Runner {
         // This stops the "Esc leaves zombies eating CPU" leak on phones.
         #[cfg(unix)]
         unsafe {
-            let pid = self.child.id() as i32;
+            let pid = self.pgid;
+            if pid <= 0 { return; }
             libc::kill(-pid, libc::SIGTERM);
             for _ in 0..15 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -37,8 +39,6 @@ impl Runner {
             }
             libc::kill(-pid, libc::SIGKILL);
         }
-        #[cfg(not(unix))]
-        let _ = self.child.kill();
     }
 }
 
@@ -76,19 +76,31 @@ pub fn spawn(args: &[&str], lang: Lang) -> std::io::Result<Runner> {
     pump(stdout, tx.clone(), false);
     pump(stderr, tx.clone(), true);
 
-    let id = child.id();
+    // pgid 在 setsid 之后等于 child.id()，主线程留它给 try_kill 用
+    // pgid equals child.id() after setsid; main thread keeps it for try_kill
+    let pgid = child.id() as i32;
+
+    // 后台线程负责 wait —— child.wait() 阻塞直到进程退出，拿到真实 exit code
+    // Background thread owns the Child and blocks on wait() to capture real exit code.
+    // 之前用 /proc/<pid> 轮询，永远只回 Done(0)，把失败包装成"成功"误导用户。
+    // Previous /proc poll always returned Done(0), masking real failures.
     thread::spawn(move || {
-        loop {
-            #[cfg(unix)]
-            {
-                if !std::path::Path::new(&format!("/proc/{}", id)).exists() { break; }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        let _ = tx.send(RunMsg::Done(0));
+        let code = match child.wait() {
+            Ok(status) => status.code().unwrap_or_else(|| {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    status.signal().map(|s| 128 + s).unwrap_or(-1)
+                }
+                #[cfg(not(unix))]
+                { -1 }
+            }),
+            Err(_) => -1,
+        };
+        let _ = tx.send(RunMsg::Done(code));
     });
 
-    Ok(Runner { rx, child })
+    Ok(Runner { rx, pgid })
 }
 
 // 交互式动作：直接继承 stdio，用真实 TTY 跑 fzf/read

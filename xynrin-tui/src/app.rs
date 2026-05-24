@@ -86,6 +86,12 @@ pub struct App {
     pub restart_after_quit: bool,
     // 主循环用：交互式动作请求 / Interactive action request, handled by main loop
     pub pending_interactive: Option<&'static [&'static str]>,
+    // 子进程退出码（None = 还没退出 / 没运行过）
+    // Child process exit code; None when not yet exited / never run
+    pub last_exit_code: Option<i32>,
+    // CHANGELOG 缓存：App 启动时解析一次，避免每帧重新分配 String/Vec
+    // Cached CHANGELOG: parsed once at App::new() to avoid per-frame realloc
+    pub cached_notes: Option<changelog::Section>,
 }
 
 impl App {
@@ -118,6 +124,8 @@ impl App {
             update_started: false,
             restart_after_quit: false,
             pending_interactive: None,
+            last_exit_code: None,
+            cached_notes: changelog::latest(),
         }
     }
 
@@ -139,6 +147,7 @@ impl App {
 
     fn drain_runner(&mut self) {
         let mut done = false;
+        let mut last_code: Option<i32> = None;
         let mut pending: Vec<crate::log_event::LogLine> = Vec::new();
         let mut switch_to_confirm: Option<String> = None;
         let mut restart_signal = false;
@@ -154,7 +163,7 @@ impl App {
                             pending.push(l);
                         }
                     }
-                    RunMsg::Done(_) => { done = true; }
+                    RunMsg::Done(code) => { done = true; last_code = Some(code); }
                 }
             }
         }
@@ -172,10 +181,14 @@ impl App {
                 self.should_quit = true;
                 return;
             }
+            // 用真实 exit code 决定成功/失败，0=ok，其它=失败
+            // Use the real exit code to decide success/failure (0 = ok)
+            let is_ok = last_code.map(|c| c == 0).unwrap_or(false);
+            self.last_exit_code = last_code;
             match &mut self.screen {
                 Screen::Running { finished, exit_ok, .. } => {
                     *finished = true;
-                    *exit_ok = Some(true);
+                    *exit_ok = Some(is_ok);
                 }
                 Screen::Bootstrap { finished } => *finished = true,
                 _ => {}
@@ -406,3 +419,4 @@ impl App {
 pub fn changelog_latest() -> Option<changelog::Section> {
     changelog::latest()
 }
+
