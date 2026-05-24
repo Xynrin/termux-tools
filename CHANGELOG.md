@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-05-24
+
+### Changed
+- **项目架构重构（向后兼容）** / Architecture refactor (backward compatible) — 每个 UI 子界面 / 每个功能模块独立目录，方便后续模块化扩展。老用户从 v3.1.5 升级路径不受影响：`tui/xynrin` 的 dispatcher 仍以 `modules/<name>` 为入口，beautify 入口保留为 `modules/beautify.sh`（现在是 26 行的薄壳，转发到 `modules/beautify/{_init,themes,shells,preview,uninstall,main}.sh`）。
+  - **Rust 端**：`xynrin-tui/src/ui/{banner,footer,log_panel,menu,notes_panel}.rs` → `ui/<name>/mod.rs`，每个屏幕一个目录，后续可加 `helpers.rs` / `state.rs` 而不污染上层。
+  - **Bash 端**：416 行的 `tui/modules/beautify.sh` 拆成 6 个文件：`_init.sh`（共享常量）、`themes.sh`（Termux 配色 + 字体）、`shells.sh`（bash/zsh/fish 提示符）、`preview.sh`（fzf 预览）、`uninstall.sh`、`main.sh`（菜单入口）。其它较小模块（mirror/proot/sysinfo/language/update/bootstrap）暂时保留单文件，未来按需同样拆分。
+
+### 升级路径 / Upgrade Path
+- v3.1.x → v3.2.0 完全无感：`xynrin update` 走 `git pull` + `install.sh --upgrade`，install.sh 只刷符号链接，dispatcher 入口名不变。
+- 静默版本检查 + `XYNRIN_POST_UPGRADE` 标记继承自 v3.1.5，升级后会自动 exec 新二进制并展示本版本 changelog。
+
 ## [3.1.5] - 2026-05-24
 
 ### Fixed
